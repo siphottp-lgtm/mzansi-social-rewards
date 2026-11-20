@@ -1,84 +1,33 @@
-# Community Engagement Platform â€“ MVP
+# Mzansi Social Rewards — Powered by KASIC Ecosystem (Celo)
 
-A practical foundation for the community communication & engagement app described in the original specification.
-
-## Whatâ€™s included
-
-| Layer | Status | Location |
-|-------|--------|----------|
-| **PostgreSQL schema** | Complete (users, communities, groups, memberships, posts, comments, reactions, events + RSVP, polls, notifications, documents, reports, audit logs, soft deletes, indexes) | `db/migrations/001_init_schema.sql` |
-| **NestJS Backend** | Auth (JWT), Users, Communities, Posts (with official/pinned role checks), Events + RSVP | `backend/` |
-| **Next.js Frontend** | Landing, Register, Login, Dashboard (community list, feed, create post, events) | `frontend/` |
-| **Mobile** | Not implemented yet â€“ see notes below | â€“ |
-
-## Quick start
-
-### 1. Database
-```bash
-# Using local Postgres or Docker
-createdb community_app
-psql -d community_app -f db/migrations/001_init_schema.sql
-```
-
-### 2. Backend
-```bash
-cd backend
-npm install
-# create .env with DB_* and JWT_SECRET (see backend/README.md)
-npm run start:dev
-# â†’ http://localhost:3001
-```
-
-### 3. Frontend
-```bash
-cd frontend
-npm install
-# optional: NEXT_PUBLIC_API_URL=http://localhost:3001
-npm run dev
-# â†’ http://localhost:3000
-```
-
-## Image support (new)
-
-- Upload avatars, community logos/covers, and post images via `POST /uploads/:category`
-- Dashboard shows real user avatars, community logos & covers, and post photos
-- Demo stock images (Unsplash) are included under `backend/uploads/`
-- Files are served statically from `/uploads/...`
-
-## Core flows that work today
-1. Register / Login â†’ JWT stored in localStorage
-2. Create a community (via `POST /communities` or extend the UI)
-3. List my communities on the dashboard
-4. Post to a community feed (members can post; only admin/mod/owner can set `isOfficial` / `isPinned`)
-5. Create events and RSVP
-
-## Mobile-first path (React Native / Expo)
-Because you requested mobile-first:
-- The API is already mobile-ready (REST + JWT).
-- Recommended next step: create an Expo (React Native) app that reuses the same `lib/api` patterns.
-- Key screens to port first: Auth â†’ Community list â†’ Feed â†’ Event detail + RSVP.
-- You can keep the Next.js web app for admin / desktop use.
-
-## Extending the MVP
-The SQL schema already contains tables for:
-- Groups & group memberships
-- Comments & reactions
-- Polls & votes
-- Notifications + preferences
-- Documents
-- Reports & moderation actions
-- Audit logs
-
-Add corresponding NestJS modules and frontend screens as needed.
-
-## Security notes for production
-- Change `JWT_SECRET`
-- Use strong password hashing (already bcrypt)
-- Enable HTTPS
-- Add rate limiting
-- Validate file uploads if you add media
-- Consider row-level security or more granular permission checks
+**Live Web Portal:** [https://vercel.app](https://vercel.app)  
+**Smart Contract & Ledger Repository:** [siphottp-lgtm/KASIC_Ecosystem](https://github.com)
 
 ---
 
-Built according to the detailed community platform specification (roles, official announcements, events + RSVP, soft deletes, etc.).
+## Executive Overview
+
+**Mzansi Social Rewards** is a mobile-first community engagement and social micro-commerce platform built for South Africa and the SADC region. Powered by the **KASIC Ecosystem** on **Celo**, it rewards constructive participation—such as content creation and supporting local merchants—with **Native KASI Coin** (`ERC-20`) and tiered **KASIC Reputation NFTs** (`ERC-721`) via an off-chain **Anti-Fraud Points Ledger** that settles weekly on Celo.
+
+---
+
+## Architecture & Repository Structure
+
+- **4-Layer Ecosystem:** Integrates a Next.js/NestJS social layer, PostgreSQL anti-fraud database layer, soulbound/tiered reputation NFTs (`KasicNFT.sol`), and Celo Sepolia settlement (`KasiCoin.sol`) with Role-Based Access Control and MiniPay alignment.
+- **Core Directories:** Structured across `frontend/` (Next.js 14 / Capacitor Android), `backend/` (NestJS REST API), `db/` (PostgreSQL migrations), and `docs/`.
+
+---
+
+## Local Quick Start
+
+1. **Database:** Create and migrate via `createdb community_app` and `psql -d community_app -f db/migrations/001_init_schema.sql`.
+2. **Backend:** Run `npm install` and `npm run start:dev` inside `backend/` (`http://localhost:3001`).
+3. **Frontend:** Run `npm install` and `npm run dev` inside `frontend/` (`http://localhost:3000`).
+
+---
+
+## 12-Week Celo Pilot Roadmap
+
+- **Weeks 1–2:** Deploy core smart contracts (`KasiCoin` & `KasicNFT`) on Celo Sepolia and set up PostgreSQL ledger migrations.
+- **Weeks 3–7:** Integrate the off-chain reward engine, anti-fraud scoring, mobile UI, creator tipping, and MiniPay wallet onboarding.
+- **Weeks 8–12:** Onboard **300 verified users**, **20 creators**, and **10 merchants** for a controlled regional pilot and transparent on-chain impact report.
