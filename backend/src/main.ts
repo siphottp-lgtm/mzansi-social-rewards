@@ -14,12 +14,19 @@ async function bootstrap() {
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      'http://localhost:3000',
+      'http://192.168.100.23:3000',
+      'http://192.168.100.23',
+      'capacitor://localhost',
+      'https://localhost',
+    ],
     credentials: true,
   });
 
-  await app.listen(process.env.PORT || 3001);
-  console.log(`Community API running on http://localhost:${process.env.PORT || 3001}`);
+  const port = Number(process.env.PORT) || 3001;
+  await app.listen(port, '0.0.0.0');
+  console.log(`Community API running on http://0.0.0.0:${port}`);
   console.log(`Uploads served from /uploads/`);
 }
 bootstrap();
