@@ -1,0 +1,4 @@
+{
+  "name": "General Community",
+  "description": "Welcome to our main community!"
+}

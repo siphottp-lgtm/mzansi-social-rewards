@@ -1,0 +1,11 @@
+import { IsNotEmpty, IsString, IsOptional } from 'class-validator';
+
+export class CreateStoryDto {
+  @IsString()
+  @IsNotEmpty()
+  mediaUrl: string;
+
+  @IsString()
+  @IsOptional()
+  caption?: string;
+}

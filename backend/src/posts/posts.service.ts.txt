@@ -1,0 +1,54 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Post } from '../common/entities/post.entity';
+
+@Injectable()
+export class PostsService {
+  constructor(
+    @InjectRepository(Post) private postsRepo: Repository<Post>,
+  ) {}
+
+  async create(userId: string, data: {
+    communityId?: string;
+    groupId?: string;
+    title?: string;
+    body: string;
+    imageUrl?: string;
+  }) {
+    const post = this.postsRepo.create({
+      authorId: userId,
+      communityId: data.communityId || null,
+      groupId: data.groupId || null,
+      title: data.title || null,
+      body: data.body,
+      postType: 'discussion',
+      status: 'published',
+      imageUrl: data.imageUrl || null,
+      publishedAt: new Date(),
+    });
+    return this.postsRepo.save(post);
+  }
+
+  async findAll(communityId?: string, groupId?: string, limit = 20) {
+    const where: any = { status: 'published', deletedAt: null };
+    if (communityId) where.communityId = communityId;
+    if (groupId) where.groupId = groupId;
+
+    return this.postsRepo.find({
+      where,
+      order: { publishedAt: 'DESC' },
+      take: limit,
+      relations: ['author'],
+    });
+  }
+
+  async findOne(id: string) {
+    const post = await this.postsRepo.findOne({
+      where: { id, deletedAt: null as any },
+      relations: ['author'],
+    });
+    if (!post) throw new NotFoundException();
+    return post;
+  }
+}

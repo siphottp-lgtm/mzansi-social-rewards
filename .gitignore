@@ -1,0 +1,12 @@
+﻿node_modules/
+.next/
+out/
+dist/
+build/
+.env
+.env.local
+*.apk
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/local.properties

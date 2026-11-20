@@ -1,0 +1,8 @@
+{
+  "appId": "com.jacinta.mzansi",
+  "appName": "Mzansi",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "http"
+  }
+}
