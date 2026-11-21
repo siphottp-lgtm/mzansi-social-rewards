@@ -30,14 +30,14 @@ async function bootstrap() {
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error(CORS blocked for origin: ), false);
+      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
     },
     credentials: true,
   });
 
   const port = Number(process.env.PORT) || 3001;
   await app.listen(port, '0.0.0.0');
-  console.log(Community API running on http://0.0.0.0:);
-  console.log(Uploads served from /uploads/);
+  console.log(`Community API running on http://0.0.0.0:${port}`);
+  console.log(`Uploads served from /uploads/`);
 }
 bootstrap();
