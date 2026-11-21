@@ -18,7 +18,6 @@ const allowedOrigins = [
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Serve uploaded images as static files
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
@@ -26,7 +25,6 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow non-browser requests (curl, PowerShell, mobile native HTTP without Origin)
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
