@@ -1,10 +1,11 @@
-﻿import { NestFactory } from '@nestjs/core';
+import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { AppModule } from './app.module';
 
 const allowedOrigins = [
+  'https://mzansi-social-rewards.vercel.app',
   'https://mzansi-social-rewards-6h1m.vercel.app',
   'https://siphottp-lgtm.github.io',
   'http://localhost:3000',
@@ -28,7 +29,7 @@ async function bootstrap() {
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS blocked for origin: ${origin}`), false);
+      return callback(null, false);
     },
     credentials: true,
   });
