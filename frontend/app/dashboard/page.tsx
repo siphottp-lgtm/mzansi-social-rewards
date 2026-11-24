@@ -11,9 +11,16 @@ export default function DashboardPage() {
   const [pages, setPages] = useState<any[]>([]);
   const [newPostContent, setNewPostContent] = useState('');
   const [activeModal, setActiveModal] = useState<'group' | 'page' | 'story' | null>(null);
+  const [submittingModal, setSubmittingModal] = useState(false);
+  const [viewingItem, setViewingItem] = useState<{ type: 'group' | 'page' | 'story'; data: any } | null>(null);
 
   const [titleInput, setTitleInput] = useState('');
   const [descInput, setDescInput] = useState('');
+  const openCreateModal = (type: 'group' | 'page' | 'story') => {
+    setTitleInput('');
+    setDescInput('');
+    setActiveModal(type);
+  };
 
   const getToken = () =>
     typeof window !== 'undefined'
@@ -185,10 +192,10 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider">Groups</h2>
-              <button onClick={() => setActiveModal('group')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
+              <button onClick={() => openCreateModal('group')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
             </div>
             {groups.length === 0 ? <p className="text-xs text-gray-400 px-2">No groups yet</p> : groups.map((g) => (
-              <div key={g.id} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">👥 {g.name}</div>
+              <div key={g.id} onClick={() => setViewingItem({ type: 'group', data: g })} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">👥 {g.name}</div>
             ))}
           </div>
 
@@ -197,10 +204,10 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider">Pages</h2>
-              <button onClick={() => setActiveModal('page')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
+              <button onClick={() => openCreateModal('page')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
             </div>
             {pages.length === 0 ? <p className="text-xs text-gray-400 px-2">No pages yet</p> : pages.map((p) => (
-              <div key={p.id} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">📄 {p.title}</div>
+              <div key={p.id} onClick={() => setViewingItem({ type: 'page', data: p })} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">📄 {p.title}</div>
             ))}
           </div>
         </div>
@@ -210,7 +217,7 @@ export default function DashboardPage() {
           {/* Stories Bar */}
           <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-none">
             <button
-              onClick={() => setActiveModal('story')}
+              onClick={() => openCreateModal('story')}
               className="w-24 h-40 md:w-28 md:h-44 bg-white/95 backdrop-blur-sm rounded-xl shadow-sm flex flex-col items-center justify-center p-2 cursor-pointer shrink-0 border hover:border-[#007749] transition"
             >
               <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 text-[#007749] rounded-full flex items-center justify-center font-bold text-lg md:text-xl mb-2">+</div>
@@ -218,14 +225,14 @@ export default function DashboardPage() {
             </button>
 
             {stories.map((story) => (
-              <div
+              <div onClick={() => setViewingItem({ type: 'story', data: story })}
                 key={story.id}
                 style={{ backgroundImage: `url(${story.mediaUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
                 className="w-24 h-40 md:w-28 md:h-44 bg-[#007749] rounded-xl shadow-sm relative overflow-hidden shrink-0 flex flex-col justify-end p-2 text-white"
               >
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                 <span className="relative z-10 text-[11px] md:text-xs font-bold drop-shadow truncate">
-                  {story.user?.fullName || story.caption || 'Story'}
+                  {story.authorName || story.user?.displayName || story.user?.fullName || story.caption || 'Story'}
                 </span>
               </div>
             ))}
@@ -303,10 +310,10 @@ export default function DashboardPage() {
         <a href="/messages" className="flex flex-col items-center text-gray-600 text-xs font-medium">
           <span className="text-lg">💬</span> Chat
         </a>
-        <button onClick={() => setActiveModal('group')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
+        <button onClick={() => openCreateModal('group')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
           <span className="text-lg">👥</span> Group
         </button>
-        <button onClick={() => setActiveModal('page')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
+        <button onClick={() => openCreateModal('page')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
           <span className="text-lg">📄</span> Page
         </button>
         <a href="/profile" className="flex flex-col items-center text-gray-600 text-xs font-medium">
@@ -357,6 +364,76 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* View Group / Page / Story Modal */}
+      {viewingItem && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          onClick={() => setViewingItem(null)}
+        >
+          <div
+            className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {viewingItem.type === 'story' ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-base font-bold text-gray-900">
+                    {viewingItem.data.authorName || viewingItem.data.user?.displayName || 'Mzansi Story'}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setViewingItem(null)}
+                    className="text-sm text-gray-500 hover:text-gray-800"
+                  >
+                    Close
+                  </button>
+                </div>
+                {viewingItem.data.mediaUrl && (
+                  <img
+                    src={viewingItem.data.mediaUrl}
+                    alt={viewingItem.data.caption || 'Story'}
+                    className="w-full max-h-80 object-cover rounded-lg"
+                  />
+                )}
+                {viewingItem.data.caption && (
+                  <p className="text-sm text-gray-700">{viewingItem.data.caption}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
+                    {viewingItem.type}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setViewingItem(null)}
+                    className="text-sm text-gray-500 hover:text-gray-800"
+                  >
+                    Close
+                  </button>
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {viewingItem.data.name || viewingItem.data.title}
+                </h3>
+                {viewingItem.data.category && (
+                  <p className="text-xs font-medium text-gray-500">
+                    Category: {viewingItem.data.category}
+                  </p>
+                )}
+                {viewingItem.data.privacy && (
+                  <p className="text-xs font-medium text-gray-500 capitalize">
+                    Privacy: {viewingItem.data.privacy}
+                  </p>
+                )}
+                <p className="text-sm text-gray-700">
+                  {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}

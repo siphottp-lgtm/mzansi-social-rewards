@@ -16,12 +16,27 @@ export class StoriesService {
     return this.storiesRepository.save(story);
   }
 
-  findAllActive() {
+  async findAllActive() {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return this.storiesRepository.find({
+    const stories = await this.storiesRepository.find({
       where: { createdAt: MoreThan(twentyFourHoursAgo) },
       relations: ['user'],
       order: { createdAt: 'DESC' },
+    });
+
+    return stories.map((s) => {
+      const u: any = s.user || {};
+      const authorName =
+        u.displayName ||
+        [u.firstName, u.lastName].filter(Boolean).join(' ') ||
+        u.email ||
+        'Mzansi Member';
+      const { passwordHash, ...safeUser } = u;
+      return {
+        ...s,
+        authorName,
+        user: Object.keys(safeUser).length ? { ...safeUser, fullName: authorName } : null,
+      };
     });
   }
 }
