@@ -9,13 +9,28 @@ import { User } from '../common/entities/user.entity';
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
+  @Get('directory')
+  directory(@CurrentUser() user: User) {
+    return this.usersService.listDirectory(user.id);
+  }
+
   @Get('me')
   me(@CurrentUser() user: User) {
     return this.usersService.findById(user.id);
   }
 
+  @Get('profile')
+  profile(@CurrentUser() user: User) {
+    return this.usersService.findById(user.id);
+  }
+
   @Patch('me')
   updateMe(@CurrentUser() user: User, @Body() body: any) {
+    return this.usersService.updateProfile(user.id, body);
+  }
+
+  @Patch('profile')
+  updateProfile(@CurrentUser() user: User, @Body() body: any) {
     return this.usersService.updateProfile(user.id, body);
   }
 }
