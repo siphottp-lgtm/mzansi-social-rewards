@@ -16,8 +16,11 @@ export class UploadsService {
   }
 
   getFileUrl(category: string, filename: string): string {
-    // In production you would return a full CDN/S3 URL
-    const base = process.env.API_PUBLIC_URL || 'http://localhost:3001';
+    const rawBase =
+      process.env.API_PUBLIC_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      'http://localhost:3001';
+    const base = rawBase.replace(/\/+$/, '');
     return `${base}/uploads/${category}/${filename}`;
   }
 

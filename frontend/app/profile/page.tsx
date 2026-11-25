@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+const resolveMediaUrl = (url?: string): string => {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) {
+    return `${API_URL.replace(/\/+$/, '')}${url}`;
+  }
+  return url.replace(/^http:\/\/localhost:3001(?=\/uploads\/)/i, API_URL.replace(/\/+$/, ''));
+};
+
 export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<any>({
@@ -99,8 +107,9 @@ export default function ProfilePage() {
 
       const uploaded = await uploadRes.json();
       const uploadedUrl = uploaded.url || '';
-      setAvatarInput(uploadedUrl);
-      setAvatarPreview(uploadedUrl);
+      const normalizedUrl = resolveMediaUrl(uploadedUrl);
+      setAvatarInput(normalizedUrl);
+      setAvatarPreview(normalizedUrl);
 
       // Immediately persist avatarUrl to the user profile
       const patchRes = await fetch(`${API_URL}/users/me`, {
@@ -109,7 +118,7 @@ export default function ProfilePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ avatarUrl: uploadedUrl }),
+        body: JSON.stringify({ avatarUrl: normalizedUrl }),
       });
 
       if (patchRes.ok) {
@@ -175,7 +184,7 @@ export default function ProfilePage() {
     router.push('/login');
   };
 
-  const displayedAvatar = avatarPreview || avatarInput || profile.avatarUrl || '';
+  const displayedAvatar = resolveMediaUrl(avatarPreview || avatarInput || profile.avatarUrl || '');
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 pb-20">

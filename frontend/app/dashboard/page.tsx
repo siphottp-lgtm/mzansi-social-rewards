@@ -4,6 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+const resolveMediaUrl = (url?: string): string => {
+  if (!url) return '';
+  if (url.startsWith('/uploads/')) {
+    return `${API_URL.replace(/\/+$/, '')}${url}`;
+  }
+  return url.replace(/^http:\/\/localhost:3001(?=\/uploads\/)/i, API_URL.replace(/\/+$/, ''));
+};
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [stories, setStories] = useState<any[]>([]);
@@ -684,7 +692,7 @@ export default function DashboardPage() {
                   <p className="text-sm">{post.body}</p>
                   {post.imageUrl && (
                     <img
-                      src={post.imageUrl}
+                      src={resolveMediaUrl(post.imageUrl)}
                       alt={post.body || 'Post image'}
                       className="w-full max-h-96 object-cover rounded-lg border"
                     />
@@ -980,7 +988,7 @@ export default function DashboardPage() {
                         <p className="text-sm text-gray-700">{p.body}</p>
                         {p.imageUrl && (
                           <img
-                            src={p.imageUrl}
+                            src={resolveMediaUrl(p.imageUrl)}
                             alt={p.body || 'Group or page post image'}
                             className="w-full max-h-60 object-cover rounded-lg border mt-1"
                           />
