@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { Post } from '../common/entities/post.entity';
@@ -218,6 +218,103 @@ export class PostsService {
       },
       commentsCount,
     };
+  }
+
+  async updatePost(
+    postId: string,
+    userId: string,
+    data: { title?: string; body: string },
+  ) {
+    const post = await this.postsRepo.findOne({
+      where: { id: postId, deletedAt: IsNull() },
+      relations: ['author'],
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.authorId !== userId) {
+      throw new ForbiddenException('You can only edit your own post');
+    }
+
+    const trimmed = (data.body || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Post text cannot be empty');
+    }
+
+    post.body = trimmed;
+    if (data.title !== undefined) {
+      post.title = data.title;
+    }
+    const saved = await this.postsRepo.save(post);
+    const [likesCount, myLike, commentsCount] = await Promise.all([
+      this.likesRepo.count({ where: { postId: saved.id } }),
+      this.likesRepo.findOne({ where: { postId: saved.id, userId } }),
+      this.commentsRepo.count({ where: { postId: saved.id } }),
+    ]);
+
+    return {
+      ...saved,
+      author: this.formatAuthor(post.author),
+      likesCount,
+      likedByMe: !!myLike,
+      commentsCount,
+      sharesCount: saved.sharesCount || 0,
+    };
+  }
+
+  async deletePost(postId: string, userId: string) {
+    const post = await this.postsRepo.findOne({
+      where: { id: postId, deletedAt: IsNull() },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+    if (post.authorId !== userId) {
+      throw new ForbiddenException('You can only delete your own post');
+    }
+
+    await this.commentsRepo.delete({ postId });
+    await this.likesRepo.delete({ postId });
+    await this.postsRepo.delete({ id: postId });
+    return { deleted: true, id: postId };
+  }
+
+  async updateComment(
+    postId: string,
+    commentId: string,
+    userId: string,
+    body: string,
+  ) {
+    const comment = await this.commentsRepo.findOne({
+      where: { id: commentId, postId },
+      relations: ['author'],
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.authorId !== userId) {
+      throw new ForbiddenException('You can only edit your own comment');
+    }
+
+    const trimmed = (body || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Comment text cannot be empty');
+    }
+
+    comment.body = trimmed;
+    const saved = await this.commentsRepo.save(comment);
+    return {
+      ...saved,
+      author: this.formatAuthor(comment.author),
+    };
+  }
+
+  async deleteComment(postId: string, commentId: string, userId: string) {
+    const comment = await this.commentsRepo.findOne({
+      where: { id: commentId, postId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.authorId !== userId) {
+      throw new ForbiddenException('You can only delete your own comment');
+    }
+
+    await this.commentsRepo.delete({ id: commentId, postId });
+    const commentsCount = await this.commentsRepo.count({ where: { postId } });
+    return { deleted: true, id: commentId, commentsCount };
   }
 
   async sharePost(postId: string) {

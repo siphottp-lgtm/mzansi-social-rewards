@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -43,7 +43,23 @@ class CreatePostDto {
   pageId?: string;
 }
 
+class UpdatePostDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsString()
+  @MinLength(1)
+  body: string;
+}
+
 class CreateCommentDto {
+  @IsString()
+  @MinLength(1)
+  body: string;
+}
+
+class UpdateCommentDto {
   @IsString()
   @MinLength(1)
   body: string;
@@ -74,6 +90,20 @@ export class PostsController {
     return this.service.findOne(id);
   }
 
+  @Patch(':id')
+  updatePost(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: UpdatePostDto,
+  ) {
+    return this.service.updatePost(id, user.id, dto);
+  }
+
+  @Delete(':id')
+  deletePost(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.service.deletePost(id, user.id);
+  }
+
   @Post(':id/like')
   toggleLike(@CurrentUser() user: User, @Param('id') id: string) {
     return this.service.toggleLike(id, user.id);
@@ -91,6 +121,25 @@ export class PostsController {
     @Body() dto: CreateCommentDto,
   ) {
     return this.service.addComment(id, user.id, dto.body);
+  }
+
+  @Patch(':postId/comments/:commentId')
+  updateComment(
+    @CurrentUser() user: User,
+    @Param('postId') postId: string,
+    @Param('commentId') commentId: string,
+    @Body() dto: UpdateCommentDto,
+  ) {
+    return this.service.updateComment(postId, commentId, user.id, dto.body);
+  }
+
+  @Delete(':postId/comments/:commentId')
+  deleteComment(
+    @CurrentUser() user: User,
+    @Param('postId') postId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.service.deleteComment(postId, commentId, user.id);
   }
 
   @Post(':id/share')

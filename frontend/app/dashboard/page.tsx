@@ -29,6 +29,15 @@ export default function DashboardPage() {
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editingPostBody, setEditingPostBody] = useState<string>('');
+  const [savingPostEditId, setSavingPostEditId] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [editingCommentKey, setEditingCommentKey] = useState<string | null>(null);
+  const [editingCommentBody, setEditingCommentBody] = useState<string>('');
+  const [savingCommentEditKey, setSavingCommentEditKey] = useState<string | null>(null);
+  const [deletingCommentKey, setDeletingCommentKey] = useState<string | null>(null);
   const [shareToast, setShareToast] = useState<string>('');
   const [statusBanner, setStatusBanner] = useState<string>('');
   const [groupPagePosts, setGroupPagePosts] = useState<any[]>([]);
@@ -56,6 +65,15 @@ export default function DashboardPage() {
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     try {
+      if (token) {
+        fetch(${API_URL}/users/me, { headers })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((me) => {
+            if (me?.id) setCurrentUserId(me.id);
+          })
+          .catch(() => {});
+      }
+
       const [storiesRes, groupsRes, pagesRes, postsRes] = await Promise.all([
         fetch(`${API_URL}/stories`),
         fetch(`${API_URL}/groups`),
@@ -258,6 +276,163 @@ export default function DashboardPage() {
       console.error('Comment error:', err);
     } finally {
       setSubmittingCommentId(null);
+    }
+  };
+
+  const handleStartEditPost = (post: any) => {
+    setEditingPostId(post.id);
+    setEditingPostBody(post.body || '');
+  };
+
+  const handleCancelEditPost = () => {
+    setEditingPostId(null);
+    setEditingPostBody('');
+  };
+
+  const handleSaveEditPost = async (postId: string) => {
+    const token = getToken();
+    const trimmed = editingPostBody.trim();
+    if (!token || !trimmed || savingPostEditId) return;
+
+    setSavingPostEditId(postId);
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...updated } : p)));
+        setGroupPagePosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...updated } : p)));
+        setEditingPostId(null);
+        setEditingPostBody('');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Could not update post.');
+      }
+    } catch (err) {
+      console.error('Edit post error:', err);
+    } finally {
+      setSavingPostEditId(null);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    const token = getToken();
+    if (!token || deletingPostId) return;
+    if (typeof window !== 'undefined' && !window.confirm('Delete this post?')) return;
+
+    setDeletingPostId(postId);
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+        setGroupPagePosts((prev) => prev.filter((p) => p.id !== postId));
+        if (openCommentsPostId === postId) setOpenCommentsPostId(null);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Could not delete post.');
+      }
+    } catch (err) {
+      console.error('Delete post error:', err);
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
+
+  const handleStartEditComment = (postId: string, comment: any) => {
+    setEditingCommentKey(`${postId}:${comment.id}`);
+    setEditingCommentBody(comment.body || '');
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentKey(null);
+    setEditingCommentBody('');
+  };
+
+  const handleSaveEditComment = async (postId: string, commentId: string) => {
+    const token = getToken();
+    const trimmed = editingCommentBody.trim();
+    const key = `${postId}:${commentId}`;
+    if (!token || !trimmed || savingCommentEditKey) return;
+
+    setSavingCommentEditKey(key);
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}/comments/${commentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      if (res.ok) {
+        const updatedComment = await res.json();
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [postId]: (prev[postId] || []).map((c: any) =>
+            c.id === commentId ? { ...c, ...updatedComment } : c,
+          ),
+        }));
+        setEditingCommentKey(null);
+        setEditingCommentBody('');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Could not update comment.');
+      }
+    } catch (err) {
+      console.error('Edit comment error:', err);
+    } finally {
+      setSavingCommentEditKey(null);
+    }
+  };
+
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    const token = getToken();
+    const key = `${postId}:${commentId}`;
+    if (!token || deletingCommentKey) return;
+    if (typeof window !== 'undefined' && !window.confirm('Delete this comment?')) return;
+
+    setDeletingCommentKey(key);
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [postId]: (prev[postId] || []).filter((c: any) => c.id !== commentId),
+        }));
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? {
+                  ...p,
+                  commentsCount:
+                    typeof data.commentsCount === 'number'
+                      ? data.commentsCount
+                      : Math.max(0, (p.commentsCount || 1) - 1),
+                }
+              : p,
+          ),
+        );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || 'Could not delete comment.');
+      }
+    } catch (err) {
+      console.error('Delete comment error:', err);
+    } finally {
+      setDeletingCommentKey(null);
     }
   };
 
@@ -678,26 +853,75 @@ export default function DashboardPage() {
             ) : (
               posts.map((post) => (
                 <div key={post.id} className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold overflow-hidden shrink-0">
-                      {post.author?.avatarUrl ? (
-                        <img
-                          src={resolveMediaUrl(post.author.avatarUrl)}
-                          alt={post.author?.fullName || 'Mzansi Member'}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        (post.author?.fullName || 'M')[0]
-                      )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold overflow-hidden shrink-0">
+                        {post.author?.avatarUrl ? (
+                          <img
+                            src={resolveMediaUrl(post.author.avatarUrl)}
+                            alt={post.author?.fullName || 'Mzansi Member'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          (post.author?.fullName || 'M')[0]
+                        )}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-sm">{post.author?.fullName || 'Mzansi Member'}</h4>
+                        <span className="text-[10px] md:text-xs text-gray-400">
+                          {post.createdAt ? new Date(post.createdAt).toLocaleString() : 'Just now'}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-sm">{post.author?.fullName || 'Mzansi Member'}</h4>
-                      <span className="text-[10px] md:text-xs text-gray-400">
-                        {post.createdAt ? new Date(post.createdAt).toLocaleString() : 'Just now'}
-                      </span>
-                    </div>
+                    {currentUserId && (post.authorId === currentUserId || post.author?.id === currentUserId) && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPost(post)}
+                          className="text-gray-500 hover:text-[#007749] font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingPostId === post.id}
+                          onClick={() => handleDeletePost(post.id)}
+                          className="text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                        >
+                          {deletingPostId === post.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm">{post.body}</p>
+                  {editingPostId === post.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={editingPostBody}
+                        onChange={(e) => setEditingPostBody(e.target.value)}
+                        rows={3}
+                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={handleCancelEditPost}
+                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingPostEditId === post.id || !editingPostBody.trim()}
+                          onClick={() => handleSaveEditPost(post.id)}
+                          className="text-xs px-3 py-1 rounded-lg bg-[#007749] text-white font-semibold hover:bg-[#005f3a] disabled:opacity-50"
+                        >
+                          {savingPostEditId === post.id ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm">{post.body}</p>
+                  )}
                   {post.imageUrl && (
                     <img
                       src={resolveMediaUrl(post.imageUrl)}
@@ -744,14 +968,69 @@ export default function DashboardPage() {
                         {(commentsByPost[post.id] || []).length === 0 ? (
                           <p className="text-xs text-gray-400">No comments yet. Start the conversation.</p>
                         ) : (
-                          (commentsByPost[post.id] || []).map((c: any) => (
-                            <div key={c.id} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
-                              <span className="font-semibold text-gray-800">
-                                {c.author?.fullName || 'Mzansi Member'}:{' '}
-                              </span>
-                              <span className="text-gray-700">{c.body}</span>
-                            </div>
-                          ))
+                          (commentsByPost[post.id] || []).map((c: any) => {
+                            const commentKey = `${post.id}:${c.id}`;
+                            const isCommentOwner =
+                              !!currentUserId &&
+                              (c.authorId === currentUserId || c.author?.id === currentUserId);
+                            return (
+                              <div key={c.id} className="bg-gray-50 rounded-lg px-3 py-2 text-xs space-y-1.5">
+                                {editingCommentKey === commentKey ? (
+                                  <div className="flex gap-1.5 items-center">
+                                    <input
+                                      type="text"
+                                      value={editingCommentBody}
+                                      onChange={(e) => setEditingCommentBody(e.target.value)}
+                                      className="flex-1 border bg-white rounded-md px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[#007749]"
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={savingCommentEditKey === commentKey || !editingCommentBody.trim()}
+                                      onClick={() => handleSaveEditComment(post.id, c.id)}
+                                      className="bg-[#007749] text-white px-2.5 py-1 rounded-md font-semibold disabled:opacity-50"
+                                    >
+                                      {savingCommentEditKey === commentKey ? '...' : 'Save'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditComment}
+                                      className="bg-gray-200 text-gray-700 px-2 py-1 rounded-md"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <span className="font-semibold text-gray-800">
+                                        {c.author?.fullName || 'Mzansi Member'}:{' '}
+                                      </span>
+                                      <span className="text-gray-700">{c.body}</span>
+                                    </div>
+                                    {isCommentOwner && (
+                                      <div className="flex items-center gap-2 shrink-0 text-[11px]">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditComment(post.id, c)}
+                                          className="text-gray-500 hover:text-[#007749] font-medium"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={deletingCommentKey === commentKey}
+                                          onClick={() => handleDeleteComment(post.id, c.id)}
+                                          className="text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
+                                        >
+                                          {deletingCommentKey === commentKey ? '...' : 'Delete'}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                       <form onSubmit={(e) => handleAddComment(e, post.id)} className="flex gap-2">
