@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
   const [shareToast, setShareToast] = useState<string>('');
+  const [statusBanner, setStatusBanner] = useState<string>('');
 
   const [titleInput, setTitleInput] = useState('');
   const [descInput, setDescInput] = useState('');
@@ -355,6 +356,61 @@ export default function DashboardPage() {
 
         {/* Center Column */}
         <div className="col-span-1 md:col-span-2 space-y-4 md:space-y-6">
+                    {/* Mobile Groups & Pages Strip */}
+          {statusBanner && (
+            <div className="bg-green-50 border border-[#007749]/40 text-[#007749] text-xs md:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm">
+              {statusBanner}
+            </div>
+          )}
+
+          <div className="md:hidden bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-sm space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Groups ({groups.length})</span>
+                <button type="button" onClick={() => openCreateModal('group')} className="text-xs font-semibold text-[#007749]">+ Create</button>
+              </div>
+              {groups.length === 0 ? (
+                <p className="text-xs text-gray-400">No groups yet</p>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setViewingItem({ type: 'group', data: g })}
+                      className="px-3 py-1.5 rounded-full bg-green-50 text-[#007749] text-xs font-semibold whitespace-nowrap shrink-0"
+                    >
+                      👥 {g.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t pt-2.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Pages ({pages.length})</span>
+                <button type="button" onClick={() => openCreateModal('page')} className="text-xs font-semibold text-[#007749]">+ Create</button>
+              </div>
+              {pages.length === 0 ? (
+                <p className="text-xs text-gray-400">No pages yet</p>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {pages.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setViewingItem({ type: 'page', data: p })}
+                      className="px-3 py-1.5 rounded-full bg-blue-50 text-[#001489] text-xs font-semibold whitespace-nowrap shrink-0"
+                    >
+                      📄 {p.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Stories Bar */}
           <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-none">
             <button
