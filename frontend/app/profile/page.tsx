@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -15,8 +15,11 @@ export default function ProfilePage() {
     location: '',
   });
   const [avatarInput, setAvatarInput] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token') || localStorage.getItem('access_token');
@@ -53,6 +56,80 @@ export default function ProfilePage() {
         setStatusMsg('Could not load profile details yet.');
       });
   }, [router]);
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setStatusMsg('Profile picture must be 5 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+
+    const token = localStorage.getItem('token') || localStorage.getItem('access_token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    const localPreview = URL.createObjectURL(file);
+    setAvatarPreview(localPreview);
+    setUploadingAvatar(true);
+    setStatusMsg('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadRes = await fetch(`${API_URL}/uploads/avatars`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json().catch(() => ({}));
+        setStatusMsg(`Upload failed (${uploadRes.status}): ${errData.message || 'Check image format or size'}`);
+        setAvatarPreview('');
+        return;
+      }
+
+      const uploaded = await uploadRes.json();
+      const uploadedUrl = uploaded.url || '';
+      setAvatarInput(uploadedUrl);
+      setAvatarPreview(uploadedUrl);
+
+      // Immediately persist avatarUrl to the user profile
+      const patchRes = await fetch(`${API_URL}/users/me`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ avatarUrl: uploadedUrl }),
+      });
+
+      if (patchRes.ok) {
+        const updated = await patchRes.json();
+        setProfile((prev: any) => ({ ...prev, ...updated }));
+        setStatusMsg('Profile picture uploaded and saved!');
+      } else {
+        setStatusMsg('Photo uploaded. Click "Save Profile Changes" to store it on your profile.');
+      }
+    } catch (err: any) {
+      console.error('Avatar upload error:', err);
+      setStatusMsg(`Upload error: ${err?.message || 'Unable to upload photo'}`);
+      setAvatarPreview('');
+    } finally {
+      setUploadingAvatar(false);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +175,8 @@ export default function ProfilePage() {
     router.push('/login');
   };
 
+  const displayedAvatar = avatarPreview || avatarInput || profile.avatarUrl || '';
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 pb-20">
       <header className="bg-white/95 shadow-sm sticky top-0 z-50 px-6 py-3 flex items-center justify-between border-b-2 border-[#007749]">
@@ -111,32 +190,55 @@ export default function ProfilePage() {
             </span>
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard')}
-          className="text-sm font-semibold text-[#007749]"
-        >
-          Back to Feed
-        </button>
-          <button type="button" onClick={() => router.push('/friends')} className="text-sm font-semibold text-[#007749]">Friends</button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard')}
+            className="text-sm font-semibold text-[#007749]"
+          >
+            Back to Feed
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/friends')}
+            className="text-sm font-semibold text-[#007749]"
+          >
+            Friends
+          </button>
+        </div>
       </header>
 
       <div className="max-w-xl mx-auto p-4 mt-6">
         <div className="bg-white rounded-xl p-6 shadow-sm space-y-6">
           <div className="flex items-center gap-4">
-            <div className="w-20 h-20 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold text-2xl overflow-hidden shadow">
-              {avatarInput ? (
-                <img src={avatarInput} alt="Avatar" className="w-full h-full object-cover" />
+            <div className="w-20 h-20 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold text-2xl overflow-hidden shadow shrink-0">
+              {displayedAvatar ? (
+                <img src={displayedAvatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 (profile.fullName || 'M')[0]
               )}
             </div>
-            <div>
+            <div className="space-y-1.5">
               <h2 className="text-lg font-bold">{profile.fullName || 'Mzansi User'}</h2>
               <p className="text-sm text-gray-500">{profile.email}</p>
               {profile.location && (
-                <p className="text-xs text-[#007749] font-medium mt-0.5">{profile.location}</p>
+                <p className="text-xs text-[#007749] font-medium">{profile.location}</p>
               )}
+              <input
+                ref={avatarFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handleAvatarFileChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                disabled={uploadingAvatar}
+                onClick={() => avatarFileInputRef.current?.click()}
+                className="mt-1 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-60 transition"
+              >
+                {uploadingAvatar ? 'Uploading photo...' : 'Upload Profile Picture'}
+              </button>
             </div>
           </div>
 
@@ -167,7 +269,10 @@ export default function ProfilePage() {
               <input
                 type="text"
                 value={avatarInput}
-                onChange={(e) => setAvatarInput(e.target.value)}
+                onChange={(e) => {
+                  setAvatarInput(e.target.value);
+                  setAvatarPreview('');
+                }}
                 placeholder="https://example.com/photo.jpg"
                 className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
               />
@@ -192,8 +297,8 @@ export default function ProfilePage() {
 
             <button
               type="submit"
-              disabled={saving}
-              className="w-full bg-[#007749] text-white py-2.5 rounded-lg font-semibold hover:bg-[#005f3a] transition"
+              disabled={saving || uploadingAvatar}
+              className="w-full bg-[#007749] text-white py-2.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-60 transition"
             >
               {saving ? 'Saving...' : 'Save Profile Changes'}
             </button>
@@ -202,6 +307,7 @@ export default function ProfilePage() {
           <hr />
 
           <button
+            type="button"
             onClick={handleLogout}
             className="w-full bg-red-600 text-white py-2.5 rounded-lg font-semibold hover:bg-red-700 transition"
           >
