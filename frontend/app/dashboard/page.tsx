@@ -927,6 +927,7 @@ export default function DashboardPage() {
                       src={resolveMediaUrl(post.imageUrl)}
                       alt={post.body || 'Post image'}
                       className="w-full max-h-96 object-cover rounded-lg border"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   )}
                   <div className="flex justify-between text-gray-500 text-xs md:text-sm pt-2 border-t">
