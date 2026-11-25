@@ -679,8 +679,16 @@ export default function DashboardPage() {
               posts.map((post) => (
                 <div key={post.id} className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold">
-                      {(post.author?.fullName || 'M')[0]}
+                    <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold overflow-hidden shrink-0">
+                      {post.author?.avatarUrl ? (
+                        <img
+                          src={resolveMediaUrl(post.author.avatarUrl)}
+                          alt={post.author?.fullName || 'Mzansi Member'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        (post.author?.fullName || 'M')[0]
+                      )}
                     </div>
                     <div>
                       <h4 className="font-semibold text-sm">{post.author?.fullName || 'Mzansi Member'}</h4>
