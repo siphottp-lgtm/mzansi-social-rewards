@@ -499,9 +499,8 @@ export default function DashboardPage() {
         <div className="hidden md:block col-span-1 space-y-3 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm h-fit">
           <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider mb-2">Contacts</h2>
           <div className="space-y-2">
-            <a href="/messages" className="flex items-center gap-3 p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer">
-              <div className="w-8 h-8 bg-[#007749] rounded-full text-white flex items-center justify-center text-xs font-bold">A</div>
-              <span className="text-sm font-medium">Amo Mphela</span>
+            <a href="/messages" className="flex items-center gap-3 p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer text-xs text-[#007749] font-semibold">
+              <span>💬 Open Mzansi Messenger</span>
             </a>
           </div>
         </div>
