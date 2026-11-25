@@ -92,15 +92,24 @@ export class PostsService {
     groupId?: string,
     pageId?: string,
   ) {
+    const cleanGroupId = groupId && groupId.trim() ? groupId.trim() : '';
+    const cleanPageId = pageId && pageId.trim() ? pageId.trim() : '';
+    const cleanCommunityId = communityId && communityId.trim() ? communityId.trim() : '';
+
     const where: any = { status: 'published', deletedAt: IsNull() };
-    if (groupId && groupId.trim()) {
-      where.groupId = groupId.trim();
+
+    if (cleanGroupId) {
+      where.groupId = cleanGroupId;
+    } else if (cleanPageId) {
+      where.pageId = cleanPageId;
+    } else {
+      // Personal status wall only: exclude group and page posts
+      where.groupId = IsNull();
+      where.pageId = IsNull();
     }
-    if (pageId && pageId.trim()) {
-      where.pageId = pageId.trim();
-    }
-    if (communityId && communityId.trim()) {
-      where.communityId = communityId.trim();
+
+    if (cleanCommunityId) {
+      where.communityId = cleanCommunityId;
     }
 
     const posts = await this.postsRepo.find({

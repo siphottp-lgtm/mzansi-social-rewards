@@ -26,6 +26,9 @@ export default function DashboardPage() {
   const [groupPagePosts, setGroupPagePosts] = useState<any[]>([]);
   const [groupPagePostBody, setGroupPagePostBody] = useState<string>('');
   const [postingInItem, setPostingInItem] = useState<boolean>(false);
+  const [itemPostImageFile, setItemPostImageFile] = useState<File | null>(null);
+  const [itemPostImagePreview, setItemPostImagePreview] = useState<string>('');
+  const itemPostFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [titleInput, setTitleInput] = useState('');
   const [descInput, setDescInput] = useState('');
@@ -307,16 +310,64 @@ export default function DashboardPage() {
       .catch(() => setGroupPagePosts([]));
   }, [viewingItem]);
 
+  const handleItemPostFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be 5 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+    setItemPostImageFile(file);
+    setItemPostImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleClearItemPostImage = () => {
+    setItemPostImageFile(null);
+    setItemPostImagePreview('');
+    if (itemPostFileInputRef.current) {
+      itemPostFileInputRef.current.value = '';
+    }
+  };
+
   const handleCreateItemPost = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = getToken();
     if (!token || !viewingItem || postingInItem) return;
     const text = groupPagePostBody.trim();
-    if (!text) return;
+    if (!text && !itemPostImageFile) return;
 
     setPostingInItem(true);
     try {
-      const payload: any = { body: text, postType: 'discussion' };
+      let imageUrl: string | undefined;
+
+      if (itemPostImageFile) {
+        const formData = new FormData();
+        formData.append('file', itemPostImageFile);
+
+        const uploadRes = await fetch(`${API_URL}/uploads/posts`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const uploadErr = await uploadRes.json().catch(() => ({}));
+          alert(`Could not upload photo: ${uploadErr.message || 'Check file type or size'}`);
+          return;
+        }
+
+        const uploaded = await uploadRes.json();
+        imageUrl = uploaded.url;
+      }
+
+      const payload: any = {
+        body: text || 'Shared a photo',
+        postType: 'discussion',
+        ...(imageUrl ? { imageUrl } : {}),
+      };
       if (viewingItem.type === 'group') payload.groupId = viewingItem.data.id;
       if (viewingItem.type === 'page') payload.pageId = viewingItem.data.id;
 
@@ -332,6 +383,7 @@ export default function DashboardPage() {
       if (res.ok) {
         const created = await res.json();
         setGroupPagePostBody('');
+        handleClearItemPostImage();
         setGroupPagePosts((prev) => [created, ...prev]);
         setStatusBanner(
           `Posted inside ${viewingItem.type === 'group' ? 'group' : 'page'} "${
@@ -339,12 +391,9 @@ export default function DashboardPage() {
           }"!`,
         );
         setTimeout(() => setStatusBanner(''), 3500);
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        alert(`Error: ${errData.message || 'Could not publish post'}`);
       }
     } catch (err) {
-      console.error('Group/Page post error:', err);
+      console.error('Error posting in group/page:', err);
     } finally {
       setPostingInItem(false);
     }
@@ -870,10 +919,40 @@ export default function DashboardPage() {
                     placeholder={`Share an update with ${viewingItem.data.name || viewingItem.data.title}...`}
                     className="w-full border bg-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
                   />
-                  <div className="flex justify-end">
+                  {itemPostImagePreview && (
+                    <div className="relative inline-block">
+                      <img
+                        src={itemPostImagePreview}
+                        alt="Group/Page post preview"
+                        className="max-h-40 rounded-lg object-cover border"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleClearItemPostImage}
+                        className="absolute top-1 right-1 bg-black/70 text-white text-[11px] px-2 py-0.5 rounded-full hover:bg-black"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    ref={itemPostFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleItemPostFileChange}
+                    className="hidden"
+                  />
+                  <div className="flex justify-between items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => itemPostFileInputRef.current?.click()}
+                      className="text-xs text-gray-600 hover:bg-gray-200/70 px-2.5 py-1.5 rounded-lg"
+                    >
+                      {itemPostImageFile ? itemPostImageFile.name : 'Add Photo'}
+                    </button>
                     <button
                       type="submit"
-                      disabled={postingInItem || !groupPagePostBody.trim()}
+                      disabled={postingInItem || (!groupPagePostBody.trim() && !itemPostImageFile)}
                       className="bg-[#007749] text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-[#005f3a] disabled:opacity-50 transition"
                     >
                       {postingInItem ? 'Posting...' : `Post to ${viewingItem.type === 'group' ? 'Group' : 'Page'}`}
@@ -899,6 +978,13 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-700">{p.body}</p>
+                        {p.imageUrl && (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.body || 'Group or page post image'}
+                            className="w-full max-h-60 object-cover rounded-lg border mt-1"
+                          />
+                        )}
                       </div>
                     ))
                   )}
