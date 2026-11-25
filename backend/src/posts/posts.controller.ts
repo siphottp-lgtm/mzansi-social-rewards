@@ -33,6 +33,14 @@ class CreatePostDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  @IsOptional()
+  @IsString()
+  pageId?: string;
 }
 
 class CreateCommentDto {
@@ -52,8 +60,13 @@ export class PostsController {
   }
 
   @Get()
-  list(@CurrentUser() user: User, @Query('communityId') communityId?: string) {
-    return this.service.findByCommunity(communityId, user?.id);
+  list(
+    @CurrentUser() user: User,
+    @Query('communityId') communityId?: string,
+    @Query('groupId') groupId?: string,
+    @Query('pageId') pageId?: string,
+  ) {
+    return this.service.findByCommunity(communityId, user?.id, 20, groupId, pageId);
   }
 
   @Get(':id')

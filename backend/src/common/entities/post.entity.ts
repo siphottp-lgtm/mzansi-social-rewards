@@ -19,6 +19,9 @@ export class Post {
   @Column({ name: 'group_id', nullable: true })
   groupId: string;
 
+  @Column({ name: 'page_id', nullable: true })
+  pageId: string;
+
   @Column({ nullable: true })
   title: string;
 

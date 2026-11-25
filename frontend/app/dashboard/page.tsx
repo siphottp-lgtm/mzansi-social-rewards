@@ -19,6 +19,9 @@ export default function DashboardPage() {
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
   const [shareToast, setShareToast] = useState<string>('');
   const [statusBanner, setStatusBanner] = useState<string>('');
+  const [groupPagePosts, setGroupPagePosts] = useState<any[]>([]);
+  const [groupPagePostBody, setGroupPagePostBody] = useState<string>('');
+  const [postingInItem, setPostingInItem] = useState<boolean>(false);
 
   const [titleInput, setTitleInput] = useState('');
   const [descInput, setDescInput] = useState('');
@@ -225,6 +228,68 @@ export default function DashboardPage() {
       setTimeout(() => setShareToast(''), 2500);
     } catch (err) {
       console.error('Share error:', err);
+    }
+  };
+
+    useEffect(() => {
+    const token = getToken();
+    if (!token || !viewingItem || (viewingItem.type !== 'group' && viewingItem.type !== 'page')) {
+      setGroupPagePosts([]);
+      return;
+    }
+    const param =
+      viewingItem.type === 'group'
+        ? `groupId=${encodeURIComponent(viewingItem.data.id)}`
+        : `pageId=${encodeURIComponent(viewingItem.data.id)}`;
+
+    fetch(`${API_URL}/posts?${param}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => setGroupPagePosts(Array.isArray(list) ? list : []))
+      .catch(() => setGroupPagePosts([]));
+  }, [viewingItem]);
+
+  const handleCreateItemPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = getToken();
+    if (!token || !viewingItem || postingInItem) return;
+    const text = groupPagePostBody.trim();
+    if (!text) return;
+
+    setPostingInItem(true);
+    try {
+      const payload: any = { body: text, postType: 'discussion' };
+      if (viewingItem.type === 'group') payload.groupId = viewingItem.data.id;
+      if (viewingItem.type === 'page') payload.pageId = viewingItem.data.id;
+
+      const res = await fetch(`${API_URL}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        setGroupPagePostBody('');
+        setGroupPagePosts((prev) => [created, ...prev]);
+        setStatusBanner(
+          `Posted inside ${viewingItem.type === 'group' ? 'group' : 'page'} "${
+            viewingItem.data.name || viewingItem.data.title
+          }"!`,
+        );
+        setTimeout(() => setStatusBanner(''), 3500);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Error: ${errData.message || 'Could not publish post'}`);
+      }
+    } catch (err) {
+      console.error('Group/Page post error:', err);
+    } finally {
+      setPostingInItem(false);
     }
   };
 

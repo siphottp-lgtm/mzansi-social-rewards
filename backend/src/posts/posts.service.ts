@@ -31,6 +31,8 @@ export class PostsService {
     communityId: string | undefined,
     data: {
       title?: string;
+      groupId?: string;
+      pageId?: string;
       body: string;
       postType?: string;
       isOfficial?: boolean;
@@ -67,6 +69,8 @@ export class PostsService {
       isOfficial: !!data.isOfficial,
       isPinned: !!data.isPinned,
       imageUrl: data.imageUrl || null,
+      groupId: data.groupId || null,
+      pageId: data.pageId || null,
       sharesCount: 0,
       status: 'published',
       publishedAt: new Date(),
@@ -81,8 +85,20 @@ export class PostsService {
     };
   }
 
-  async findByCommunity(communityId?: string, currentUserId?: string, limit = 20) {
+  async findByCommunity(
+    communityId?: string,
+    currentUserId?: string,
+    limit = 20,
+    groupId?: string,
+    pageId?: string,
+  ) {
     const where: any = { status: 'published', deletedAt: IsNull() };
+    if (groupId && groupId.trim()) {
+      where.groupId = groupId.trim();
+    }
+    if (pageId && pageId.trim()) {
+      where.pageId = pageId.trim();
+    }
     if (communityId && communityId.trim()) {
       where.communityId = communityId.trim();
     }
