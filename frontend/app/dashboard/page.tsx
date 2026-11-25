@@ -728,36 +728,83 @@ export default function DashboardPage() {
                 )}
               </>
             ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
-                    {viewingItem.type}
-                  </span>
+              <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
+                <div className="flex items-start justify-between gap-3 border-b pb-3">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
+                      {viewingItem.type}
+                    </span>
+                    <h3 className="text-lg font-bold text-gray-900">
+                      {viewingItem.data.name || viewingItem.data.title}
+                    </h3>
+                    {viewingItem.data.category && (
+                      <p className="text-xs font-medium text-gray-500">
+                        Category: {viewingItem.data.category}
+                      </p>
+                    )}
+                    {viewingItem.data.privacy && (
+                      <p className="text-xs font-medium text-gray-500 capitalize">
+                        Privacy: {viewingItem.data.privacy}
+                      </p>
+                    )}
+                    <p className="text-sm text-gray-700 mt-1">
+                      {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setViewingItem(null)}
-                    className="text-sm text-gray-500 hover:text-gray-800"
+                    className="text-sm text-gray-500 hover:text-gray-800 shrink-0"
                   >
                     Close
                   </button>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  {viewingItem.data.name || viewingItem.data.title}
-                </h3>
-                {viewingItem.data.category && (
-                  <p className="text-xs font-medium text-gray-500">
-                    Category: {viewingItem.data.category}
-                  </p>
-                )}
-                {viewingItem.data.privacy && (
-                  <p className="text-xs font-medium text-gray-500 capitalize">
-                    Privacy: {viewingItem.data.privacy}
-                  </p>
-                )}
-                <p className="text-sm text-gray-700">
-                  {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
-                </p>
-              </>
+
+                <form onSubmit={handleCreateItemPost} className="space-y-2.5 bg-gray-50 p-3 rounded-xl border">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Create a post in this {viewingItem.type}
+                  </label>
+                  <textarea
+                    value={groupPagePostBody}
+                    onChange={(e) => setGroupPagePostBody(e.target.value)}
+                    rows={2}
+                    placeholder={`Share an update with ${viewingItem.data.name || viewingItem.data.title}...`}
+                    className="w-full border bg-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={postingInItem || !groupPagePostBody.trim()}
+                      className="bg-[#007749] text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-[#005f3a] disabled:opacity-50 transition"
+                    >
+                      {postingInItem ? 'Posting...' : `Post to ${viewingItem.type === 'group' ? 'Group' : 'Page'}`}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Posts ({groupPagePosts.length})
+                  </h4>
+                  {groupPagePosts.length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2">No posts here yet. Be the first to post above!</p>
+                  ) : (
+                    groupPagePosts.map((p: any) => (
+                      <div key={p.id} className="border rounded-lg p-3 bg-white space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-gray-800">
+                            {p.author?.fullName || 'Mzansi Member'}
+                          </span>
+                          <span className="text-[11px] text-gray-400">
+                            {p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now'}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">{p.body}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
