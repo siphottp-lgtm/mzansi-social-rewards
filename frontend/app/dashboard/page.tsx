@@ -421,10 +421,74 @@ export default function DashboardPage() {
                   </div>
                   <p className="text-sm">{post.body}</p>
                   <div className="flex justify-between text-gray-500 text-xs md:text-sm pt-2 border-t">
-                    <button className="hover:text-[#007749] font-medium">👍 Like</button>
-                    <button className="hover:text-[#007749] font-medium">💬 Comment</button>
-                    <button className="hover:text-[#007749] font-medium">↗️ Share</button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleLike(post.id)}
+                      className={`font-medium flex items-center gap-1 ${
+                        post.likedByMe ? 'text-[#007749] font-bold' : 'hover:text-[#007749]'
+                      }`}
+                    >
+                      <span>{post.likedByMe ? '♥' : '♡'}</span>
+                      <span>Like ({post.likesCount || 0})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleComments(post.id)}
+                      className="hover:text-[#007749] font-medium flex items-center gap-1"
+                    >
+                      <span>💬</span>
+                      <span>Comment ({post.commentsCount || 0})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSharePost(post)}
+                      className="hover:text-[#007749] font-medium flex items-center gap-1"
+                    >
+                      <span>↗</span>
+                      <span>Share ({post.sharesCount || 0})</span>
+                    </button>
                   </div>
+
+                  {shareToast && openCommentsPostId !== post.id && (
+                    <p className="text-xs text-[#007749] font-medium">{shareToast}</p>
+                  )}
+
+                  {openCommentsPostId === post.id && (
+                    <div className="pt-2 border-t space-y-2.5">
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {(commentsByPost[post.id] || []).length === 0 ? (
+                          <p className="text-xs text-gray-400">No comments yet. Start the conversation.</p>
+                        ) : (
+                          (commentsByPost[post.id] || []).map((c: any) => (
+                            <div key={c.id} className="bg-gray-50 rounded-lg px-3 py-2 text-xs">
+                              <span className="font-semibold text-gray-800">
+                                {c.author?.fullName || 'Mzansi Member'}:{' '}
+                              </span>
+                              <span className="text-gray-700">{c.body}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <form onSubmit={(e) => handleAddComment(e, post.id)} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={commentDrafts[post.id] || ''}
+                          onChange={(e) =>
+                            setCommentDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))
+                          }
+                          placeholder="Write a comment..."
+                          className="flex-1 border rounded-full px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-[#007749]"
+                        />
+                        <button
+                          type="submit"
+                          disabled={submittingCommentId === post.id}
+                          className="bg-[#007749] text-white text-xs font-semibold px-3.5 py-1.5 rounded-full hover:bg-[#005f3a] disabled:opacity-60"
+                        >
+                          {submittingCommentId === post.id ? '...' : 'Reply'}
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               ))
             )}
