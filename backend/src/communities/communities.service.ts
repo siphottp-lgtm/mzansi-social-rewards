@@ -95,4 +95,51 @@ export class CommunitiesService {
     }
     return membership;
   }
+
+  async ensureDefaultCommunityForUser(userId: string): Promise<string> {
+    const userMemberships = await this.membershipsRepo.find({
+      where: { userId, status: 'active' },
+      order: { joinedAt: 'ASC' },
+    });
+    if (userMemberships.length > 0) {
+      return userMemberships[0].communityId;
+    }
+
+    let defaultCommunity = await this.communitiesRepo.findOne({
+      where: { slug: 'mzansi-commons', deletedAt: null as any },
+    });
+
+    if (!defaultCommunity) {
+      defaultCommunity = this.communitiesRepo.create({
+        name: 'Mzansi Commons',
+        slug: 'mzansi-commons',
+        description: 'Official Mzansi community wall — Two Hands are Better than One.',
+        visibility: 'public',
+        status: 'active',
+        createdById: userId,
+      });
+      await this.communitiesRepo.save(defaultCommunity);
+    }
+
+    const existingMembership = await this.membershipsRepo.findOne({
+      where: { communityId: defaultCommunity.id, userId },
+    });
+
+    if (!existingMembership) {
+      const membership = this.membershipsRepo.create({
+        communityId: defaultCommunity.id,
+        userId,
+        role: 'member',
+        status: 'active',
+        joinedAt: new Date(),
+      });
+      await this.membershipsRepo.save(membership);
+    } else if (existingMembership.status !== 'active') {
+      existingMembership.status = 'active';
+      existingMembership.joinedAt = new Date();
+      await this.membershipsRepo.save(existingMembership);
+    }
+
+    return defaultCommunity.id;
+  }
 }

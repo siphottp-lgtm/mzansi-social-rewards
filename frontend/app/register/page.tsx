@@ -1,11 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/api';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -23,7 +21,7 @@ export default function RegisterPage() {
       const res = await auth.register(form);
       localStorage.setItem('token', res.accessToken);
       localStorage.setItem('user', JSON.stringify(res.user));
-      router.push('/dashboard');
+      window.location.assign('/dashboard/');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -33,9 +31,9 @@ export default function RegisterPage() {
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Create account</h1>
+      <h1 className="text-2xl font-bold mb-6">Create Mzansi account</h1>
       <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border">
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-red-600 text-sm break-words">{error}</p>}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium mb-1">First name</label>
@@ -78,11 +76,14 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-[#007749] text-white py-2.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-50"
         >
-          {loading ? 'Creating…' : 'Create account'}
+          {loading ? 'Creating...' : 'Create account'}
         </button>
       </form>
+      <p className="mt-4 text-sm text-center text-gray-600">
+        Already have an account? <a href="/login/" className="text-[#007749] font-semibold">Sign in</a>
+      </p>
     </div>
   );
 }

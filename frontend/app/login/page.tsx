@@ -1,11 +1,9 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { auth } from '@/lib/api';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,7 +17,7 @@ export default function LoginPage() {
       const res = await auth.login({ email, password });
       localStorage.setItem('token', res.accessToken);
       localStorage.setItem('user', JSON.stringify(res.user));
-      router.push('/dashboard');
+      window.location.assign('/dashboard/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -29,9 +27,9 @@ export default function LoginPage() {
 
   return (
     <div className="max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Sign in</h1>
+      <h1 className="text-2xl font-bold mb-6">Sign in to Mzansi</h1>
       <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border">
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && <p className="text-red-600 text-sm break-words">{error}</p>}
         <div>
           <label className="block text-sm font-medium mb-1">Email</label>
           <input
@@ -55,13 +53,13 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-[#007749] text-white py-2.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-50"
         >
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
       <p className="mt-4 text-sm text-center text-gray-600">
-        No account? <a href="/register" className="text-blue-600">Register</a>
+        No account? <a href="/register/" className="text-[#007749] font-semibold">Register</a>
       </p>
     </div>
   );

@@ -1,5 +1,6 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,7 +23,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} pb-16 md:pb-0`}>{children}</body>
+      <body className={`${inter.className} pb-16 md:pb-0`}>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

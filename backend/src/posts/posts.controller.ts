@@ -6,8 +6,9 @@ import { User } from '../common/entities/user.entity';
 import { IsString, IsOptional, IsBoolean, MinLength } from 'class-validator';
 
 class CreatePostDto {
+  @IsOptional()
   @IsString()
-  communityId: string;
+  communityId?: string;
 
   @IsOptional()
   @IsString()
@@ -45,7 +46,7 @@ export class PostsController {
   }
 
   @Get()
-  list(@Query('communityId') communityId: string) {
+  list(@Query('communityId') communityId?: string) {
     return this.service.findByCommunity(communityId);
   }
 
