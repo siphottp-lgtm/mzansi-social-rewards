@@ -38,6 +38,12 @@ export default function DashboardPage() {
   const [editingCommentBody, setEditingCommentBody] = useState<string>('');
   const [savingCommentEditKey, setSavingCommentEditKey] = useState<string | null>(null);
   const [deletingCommentKey, setDeletingCommentKey] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<boolean>(false);
+  const [editItemTitle, setEditItemTitle] = useState<string>('');
+  const [editItemDesc, setEditItemDesc] = useState<string>('');
+  const [editItemPrivacy, setEditItemPrivacy] = useState<string>('public');
+  const [savingItemEdit, setSavingItemEdit] = useState<boolean>(false);
+  const [deletingItem, setDeletingItem] = useState<boolean>(false);
   const [shareToast, setShareToast] = useState<string>('');
   const [statusBanner, setStatusBanner] = useState<string>('');
   const [groupPagePosts, setGroupPagePosts] = useState<any[]>([]);
@@ -436,6 +442,109 @@ export default function DashboardPage() {
     }
   };
 
+  const handleStartEditItem = () => {
+    if (!viewingItem || (viewingItem.type !== 'group' && viewingItem.type !== 'page')) return;
+    setEditItemTitle(viewingItem.data.name || viewingItem.data.title || '');
+    setEditItemDesc(viewingItem.data.description || viewingItem.data.bio || '');
+    setEditItemPrivacy(viewingItem.data.privacy || 'public');
+    setEditingItem(true);
+  };
+
+  const handleSaveEditItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = getToken();
+    const trimmedTitle = editItemTitle.trim();
+    if (!token || !viewingItem || !trimmedTitle || savingItemEdit) return;
+    if (viewingItem.type !== 'group' && viewingItem.type !== 'page') return;
+
+    setSavingItemEdit(true);
+    try {
+      const endpoint =
+        viewingItem.type === 'group'
+          ? `/groups/${viewingItem.data.id}`
+          : `/pages/${viewingItem.data.id}`;
+      const payload =
+        viewingItem.type === 'group'
+          ? { name: trimmedTitle, description: editItemDesc, privacy: editItemPrivacy }
+          : { title: trimmedTitle, bio: editItemDesc };
+
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        if (viewingItem.type === 'group') {
+          setGroups((prev) => prev.map((g) => (g.id === updated.id ? { ...g, ...updated } : g)));
+        } else {
+          setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+        }
+        setViewingItem({ type: viewingItem.type, data: { ...viewingItem.data, ...updated } });
+        setEditingItem(false);
+        setStatusBanner(
+          `${viewingItem.type === 'group' ? 'Group' : 'Page'} "${updated.name || updated.title}" updated!`,
+        );
+        setTimeout(() => setStatusBanner(''), 3500);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || `Could not update ${viewingItem.type}.`);
+      }
+    } catch (err) {
+      console.error('Update group/page error:', err);
+    } finally {
+      setSavingItemEdit(false);
+    }
+  };
+
+  const handleDeleteItem = async () => {
+    const token = getToken();
+    if (!token || !viewingItem || deletingItem) return;
+    if (viewingItem.type !== 'group' && viewingItem.type !== 'page') return;
+
+    const label = viewingItem.data.name || viewingItem.data.title || viewingItem.type;
+    if (typeof window !== 'undefined' && !window.confirm(`Delete ${viewingItem.type} "${label}"?`)) {
+      return;
+    }
+
+    setDeletingItem(true);
+    try {
+      const endpoint =
+        viewingItem.type === 'group'
+          ? `/groups/${viewingItem.data.id}`
+          : `/pages/${viewingItem.data.id}`;
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const deletedId = viewingItem.data.id;
+        const deletedType = viewingItem.type;
+        if (deletedType === 'group') {
+          setGroups((prev) => prev.filter((g) => g.id !== deletedId));
+        } else {
+          setPages((prev) => prev.filter((p) => p.id !== deletedId));
+        }
+        setViewingItem(null);
+        setEditingItem(false);
+        setStatusBanner(`${deletedType === 'group' ? 'Group' : 'Page'} "${label}" deleted.`);
+        setTimeout(() => setStatusBanner(''), 3500);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message || `Could not delete ${viewingItem.type}.`);
+      }
+    } catch (err) {
+      console.error('Delete group/page error:', err);
+    } finally {
+      setDeletingItem(false);
+    }
+  };
+
   const handleSharePost = async (post: any) => {
     const token = getToken();
     if (!token) {
@@ -476,6 +585,7 @@ export default function DashboardPage() {
 
     useEffect(() => {
     const token = getToken();
+    setEditingItem(false);
     if (!token || !viewingItem || (viewingItem.type !== 'group' && viewingItem.type !== 'page')) {
       setGroupPagePosts([]);
       return;
@@ -1173,35 +1283,120 @@ export default function DashboardPage() {
               </>
             ) : (
               <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
-                <div className="flex items-start justify-between gap-3 border-b pb-3">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
-                      {viewingItem.type}
-                    </span>
-                    <h3 className="text-lg font-bold text-gray-900">
-                      {viewingItem.data.name || viewingItem.data.title}
-                    </h3>
-                    {viewingItem.data.category && (
-                      <p className="text-xs font-medium text-gray-500">
-                        Category: {viewingItem.data.category}
+                <div className="border-b pb-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
+                        {viewingItem.type}
+                      </span>
+                      <h3 className="text-lg font-bold text-gray-900">
+                        {viewingItem.data.name || viewingItem.data.title}
+                      </h3>
+                      {viewingItem.data.category && (
+                        <p className="text-xs font-medium text-gray-500">
+                          Category: {viewingItem.data.category}
+                        </p>
+                      )}
+                      {viewingItem.data.privacy && (
+                        <p className="text-xs font-medium text-gray-500 capitalize">
+                          Privacy: {viewingItem.data.privacy}
+                        </p>
+                      )}
+                      <p className="text-sm text-gray-700 mt-1">
+                        {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
                       </p>
-                    )}
-                    {viewingItem.data.privacy && (
-                      <p className="text-xs font-medium text-gray-500 capitalize">
-                        Privacy: {viewingItem.data.privacy}
-                      </p>
-                    )}
-                    <p className="text-sm text-gray-700 mt-1">
-                      {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
-                    </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {currentUserId &&
+                        ((viewingItem.type === 'group' && viewingItem.data.creatorId === currentUserId) ||
+                          (viewingItem.type === 'page' && viewingItem.data.ownerId === currentUserId)) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleStartEditItem}
+                              className="text-xs font-semibold text-[#007749] hover:underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingItem}
+                              onClick={handleDeleteItem}
+                              className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-50"
+                            >
+                              {deletingItem ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </>
+                        )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingItem(false);
+                          setViewingItem(null);
+                        }}
+                        className="text-sm text-gray-500 hover:text-gray-800"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setViewingItem(null)}
-                    className="text-sm text-gray-500 hover:text-gray-800 shrink-0"
-                  >
-                    Close
-                  </button>
+
+                  {editingItem && (
+                    <form onSubmit={handleSaveEditItem} className="bg-gray-50 p-3 rounded-xl border space-y-2.5">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          {viewingItem.type === 'group' ? 'Group Name' : 'Page Title'}
+                        </label>
+                        <input
+                          type="text"
+                          value={editItemTitle}
+                          onChange={(e) => setEditItemTitle(e.target.value)}
+                          required
+                          className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          {viewingItem.type === 'group' ? 'Description' : 'Bio'}
+                        </label>
+                        <textarea
+                          value={editItemDesc}
+                          onChange={(e) => setEditItemDesc(e.target.value)}
+                          rows={2}
+                          className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
+                        />
+                      </div>
+                      {viewingItem.type === 'group' && (
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Privacy</label>
+                          <select
+                            value={editItemPrivacy}
+                            onChange={(e) => setEditItemPrivacy(e.target.value)}
+                            className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
+                          >
+                            <option value="public">Public</option>
+                            <option value="private">Private</option>
+                          </select>
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem(false)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={savingItemEdit || !editItemTitle.trim()}
+                          className="text-xs px-3.5 py-1.5 rounded-lg bg-[#007749] text-white font-semibold hover:bg-[#005f3a] disabled:opacity-50"
+                        >
+                          {savingItemEdit ? 'Saving...' : 'Save Changes'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
 
                 <form onSubmit={handleCreateItemPost} className="space-y-2.5 bg-gray-50 p-3 rounded-xl border">
