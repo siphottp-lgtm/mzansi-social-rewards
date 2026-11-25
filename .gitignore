@@ -10,3 +10,7 @@ frontend/android/.gradle/
 frontend/android/app/build/
 frontend/android/build/
 frontend/android/local.properties
+
+.vercel
+*.bak
+frontend/tsconfig.tsbuildinfo
