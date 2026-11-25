@@ -3,6 +3,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { FriendsModule } from './friends/friends.module';
+import { GroupsModule } from './groups/groups.module';
+import { StoriesModule } from './stories/stories.module';
+import { PagesModule } from './pages/pages.module';
 import { MessagesModule } from './messages/messages.module';
 import { CommunitiesModule } from './communities/communities.module';
 import { PostsModule } from './posts/posts.module';
@@ -41,6 +44,9 @@ import { EventAttendee } from './common/entities/event-attendee.entity';
     AuthModule,
     UsersModule,
     FriendsModule,
+    GroupsModule,
+    StoriesModule,
+    PagesModule,
     MessagesModule,
     CommunitiesModule,
     PostsModule,

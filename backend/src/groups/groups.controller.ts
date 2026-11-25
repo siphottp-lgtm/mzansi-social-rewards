@@ -1,17 +1,18 @@
-import { Controller, Get, Post, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
-import { AuthGuard } from '@nestjs/passport';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { User } from '../common/entities/user.entity';
 
 @Controller('groups')
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   @Post()
-  create(@Req() req, @Body() dto: CreateGroupDto) {
-    const userId = req.user.userId || req.user.id || req.user.sub;
-    return this.groupsService.create(userId, dto);
+  create(@CurrentUser() user: User, @Body() dto: CreateGroupDto) {
+    return this.groupsService.create(user.id, dto);
   }
 
   @Get()
