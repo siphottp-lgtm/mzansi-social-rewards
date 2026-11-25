@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -10,6 +10,10 @@ export default function DashboardPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [newPostContent, setNewPostContent] = useState('');
+  const [postImageFile, setPostImageFile] = useState<File | null>(null);
+  const [postImagePreview, setPostImagePreview] = useState<string>('');
+  const [uploadingPostImage, setUploadingPostImage] = useState(false);
+  const postFileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeModal, setActiveModal] = useState<'group' | 'page' | 'story' | null>(null);
   const [submittingModal, setSubmittingModal] = useState(false);
   const [viewingItem, setViewingItem] = useState<{ type: 'group' | 'page' | 'story'; data: any } | null>(null);
@@ -61,9 +65,30 @@ export default function DashboardPage() {
     fetchAllData();
   }, []);
 
+  const handlePostFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be 5 MB or smaller.');
+      e.target.value = '';
+      return;
+    }
+    setPostImageFile(file);
+    setPostImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleClearPostImage = () => {
+    setPostImageFile(null);
+    setPostImagePreview('');
+    if (postFileInputRef.current) {
+      postFileInputRef.current.value = '';
+    }
+  };
+
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPostContent.trim()) return;
+    const trimmedBody = newPostContent.trim();
+    if (!trimmedBody && !postImageFile) return;
 
     const token = getToken();
     if (!token) {
@@ -72,6 +97,33 @@ export default function DashboardPage() {
     }
 
     try {
+      let imageUrl: string | undefined;
+
+      if (postImageFile) {
+        setUploadingPostImage(true);
+        const formData = new FormData();
+        formData.append('file', postImageFile);
+
+        const uploadRes = await fetch(`${API_URL}/uploads/posts`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        setUploadingPostImage(false);
+
+        if (!uploadRes.ok) {
+          const uploadErr = await uploadRes.json().catch(() => ({}));
+          alert(`Could not upload photo: ${uploadErr.message || 'Check file type or size'}`);
+          return;
+        }
+
+        const uploaded = await uploadRes.json();
+        imageUrl = uploaded.url;
+      }
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
@@ -80,17 +132,22 @@ export default function DashboardPage() {
       const res = await fetch(`${API_URL}/posts`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ body: newPostContent }),
+        body: JSON.stringify({
+          body: trimmedBody || 'Shared a photo',
+          ...(imageUrl ? { imageUrl } : {}),
+        }),
       });
 
       if (res.ok) {
         setNewPostContent('');
+        handleClearPostImage();
         fetchAllData();
       } else {
-        const errData = await res.json();
+        const errData = await res.json().catch(() => ({}));
         alert(`Could not create post: ${errData.message || 'Check required fields'}`);
       }
     } catch (err) {
+      setUploadingPostImage(false);
       console.error(err);
     }
   };
@@ -513,9 +570,44 @@ export default function DashboardPage() {
                   className="w-full bg-gray-100 px-4 py-2.5 rounded-full text-sm outline-none focus:ring-2 focus:ring-[#007749]"
                 />
               </div>
+              {postImagePreview && (
+                <div className="relative inline-block">
+                  <img
+                    src={postImagePreview}
+                    alt="Selected post preview"
+                    className="max-h-56 rounded-lg object-cover border"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleClearPostImage}
+                    className="absolute top-1.5 right-1.5 bg-black/70 text-white text-xs px-2 py-0.5 rounded-full hover:bg-black"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              <input
+                ref={postFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                onChange={handlePostFileChange}
+                className="hidden"
+              />
               <div className="flex justify-between items-center pt-2 border-t text-xs md:text-sm">
-                <button type="button" className="text-gray-600 hover:bg-gray-100 px-2 md:px-3 py-1.5 rounded-lg">📷 Photo/Video</button>
-                <button type="submit" className="bg-[#007749] text-white px-4 md:px-5 py-1.5 rounded-lg font-semibold hover:bg-[#005f3a] transition">Post</button>
+                <button
+                  type="button"
+                  onClick={() => postFileInputRef.current?.click()}
+                  className="text-gray-600 hover:bg-gray-100 px-2 md:px-3 py-1.5 rounded-lg"
+                >
+                  {postImageFile ? postImageFile.name : 'Photo/Video'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploadingPostImage}
+                  className="bg-[#007749] text-white px-4 md:px-5 py-1.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-60 transition"
+                >
+                  {uploadingPostImage ? 'Uploading...' : 'Post'}
+                </button>
               </div>
             </form>
           </div>
@@ -541,6 +633,13 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <p className="text-sm">{post.body}</p>
+                  {post.imageUrl && (
+                    <img
+                      src={post.imageUrl}
+                      alt={post.body || 'Post image'}
+                      className="w-full max-h-96 object-cover rounded-lg border"
+                    />
+                  )}
                   <div className="flex justify-between text-gray-500 text-xs md:text-sm pt-2 border-t">
                     <button
                       type="button"

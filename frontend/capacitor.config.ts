@@ -1,9 +1,13 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+﻿import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.jacinta.mzansi',
   appName: 'Mzansi',
-  webDir: 'out'
+  webDir: 'out',
+  server: {
+    androidScheme: 'http',
+    cleartext: true,
+  },
 };
 
 export default config;
