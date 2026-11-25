@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
     try {
       if (token) {
-        fetch(${API_URL}/users/me, { headers })
+        fetch(`${API_URL}/users/me`, { headers })
           .then((r) => (r.ok ? r.json() : null))
           .then((me) => {
             if (me?.id) setCurrentUserId(me.id);
