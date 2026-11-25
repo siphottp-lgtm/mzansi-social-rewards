@@ -35,6 +35,12 @@ class CreatePostDto {
   imageUrl?: string;
 }
 
+class CreateCommentDto {
+  @IsString()
+  @MinLength(1)
+  body: string;
+}
+
 @Controller('posts')
 @UseGuards(JwtAuthGuard)
 export class PostsController {
@@ -46,12 +52,36 @@ export class PostsController {
   }
 
   @Get()
-  list(@Query('communityId') communityId?: string) {
-    return this.service.findByCommunity(communityId);
+  list(@CurrentUser() user: User, @Query('communityId') communityId?: string) {
+    return this.service.findByCommunity(communityId, user?.id);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
+  }
+
+  @Post(':id/like')
+  toggleLike(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.service.toggleLike(id, user.id);
+  }
+
+  @Get(':id/comments')
+  listComments(@Param('id') id: string) {
+    return this.service.listComments(id);
+  }
+
+  @Post(':id/comments')
+  addComment(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.service.addComment(id, user.id, dto.body);
+  }
+
+  @Post(':id/share')
+  share(@Param('id') id: string) {
+    return this.service.sharePost(id);
   }
 }

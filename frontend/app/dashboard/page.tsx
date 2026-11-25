@@ -13,6 +13,11 @@ export default function DashboardPage() {
   const [activeModal, setActiveModal] = useState<'group' | 'page' | 'story' | null>(null);
   const [submittingModal, setSubmittingModal] = useState(false);
   const [viewingItem, setViewingItem] = useState<{ type: 'group' | 'page' | 'story'; data: any } | null>(null);
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState<string>('');
 
   const [titleInput, setTitleInput] = useState('');
   const [descInput, setDescInput] = useState('');
@@ -83,6 +88,142 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+    const loadComments = async (postId: string) => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}/comments`, {
+        headers: { Authorization: `Bearer ${token}`},
+      });
+      if (res.ok) {
+        const list = await res.json();
+        setCommentsByPost((prev) => ({ ...prev, [postId]: Array.isArray(list) ? list : [] }));
+      }
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    }
+  };
+
+  const handleToggleLike = async (postId: string) => {
+    const token = getToken();
+    if (!token) {
+      alert('Please log in first to like posts.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, likedByMe: data.liked, likesCount: data.likesCount }
+              : p,
+          ),
+        );
+      }
+    } catch (err) {
+      console.error('Like error:', err);
+    }
+  };
+
+  const handleToggleComments = async (postId: string) => {
+    if (openCommentsPostId === postId) {
+      setOpenCommentsPostId(null);
+      return;
+    }
+    setOpenCommentsPostId(postId);
+    await loadComments(postId);
+  };
+
+  const handleAddComment = async (e: React.FormEvent, postId: string) => {
+    e.preventDefault();
+    const token = getToken();
+    if (!token) {
+      alert('Please log in first to comment.');
+      return;
+    }
+    const text = (commentDrafts[postId] || '').trim();
+    if (!text || submittingCommentId === postId) return;
+
+    setSubmittingCommentId(postId);
+    try {
+      const res = await fetch(`${API_URL}/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body: text }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
+        if (data.comment) {
+          setCommentsByPost((prev) => ({
+            ...prev,
+            [postId]: [...(prev[postId] || []), data.comment],
+          }));
+        }
+        setPosts((prev) =>
+          prev.map((p) =>
+            p.id === postId
+              ? { ...p, commentsCount: data.commentsCount ?? (p.commentsCount || 0) + 1 }
+              : p,
+          ),
+        );
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(`Could not post comment: ${errData.message || "Please try again"}`);
+      }
+    } catch (err) {
+      console.error('Comment error:', err);
+    } finally {
+      setSubmittingCommentId(null);
+    }
+  };
+
+  const handleSharePost = async (post: any) => {
+    const token = getToken();
+    if (!token) {
+      alert('Please log in first to share posts.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/posts/${post.id}/share`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`},
+      });
+      let updatedCount = (post.sharesCount || 0) + 1;
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.sharesCount === 'number') updatedCount = data.sharesCount;
+      }
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, sharesCount: updatedCount } : p)),
+      );
+
+      const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://mzansi-social-rewards.vercel.app';
+      const shareText = `${post.author?.fullName || "Mzansi Member"} on Mzansi: ${post.body}`;
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try {
+          await navigator.share({ title: 'Mzansi Post', text: shareText, url: shareUrl });
+        } catch {
+          // User cancelled share sheet
+        }
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(`${shareText} (${shareUrl})`);
+      }
+      setShareToast('Post shared!');
+      setTimeout(() => setShareToast(''), 2500);
+    } catch (err) {
+      console.error('Share error:', err);
     }
   };
 

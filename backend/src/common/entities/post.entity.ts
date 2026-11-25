@@ -37,6 +37,9 @@ export class Post {
   @Column({ name: 'is_official', default: false })
   isOfficial: boolean;
 
+  @Column({ name: 'shares_count', default: 0 })
+  sharesCount: number;
+
   @Column({ default: 'published' })
   status: string;
 
