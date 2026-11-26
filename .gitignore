@@ -14,3 +14,5 @@ frontend/android/local.properties
 .vercel
 *.bak
 frontend/tsconfig.tsbuildinfo
+.vercel
+.env*

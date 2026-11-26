@@ -1,116 +1,96 @@
-'use client';
+﻿"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React from "react";
+import Link from "next/link";
+import "../styles/common-upgrade.css";
 
-export default function Home() {
-  const router = useRouter();
-  const [statusText, setStatusText] = useState('');
-
-  const goTo = (path: string, label: string) => {
-    setStatusText(`Opening ${label} (${path})...`);
-    try {
-      router.push(path);
-    } catch {
-      window.location.assign(path);
-    }
-  };
-
-  const features = [
-    {
-      title: 'Official announcements',
-      desc: 'Admins can mark posts as official and attach photos so members never miss important news.',
-      emoji: '📢',
-      path: '/login/',
-    },
-    {
-      title: 'Events & RSVP',
-      desc: 'Create events with cover images, track attendance, and send reminders.',
-      emoji: '📅',
-      path: '/login/',
-    },
-    {
-      title: 'Photos & media',
-      desc: 'Upload avatars, community logos, and post images. Real media makes communities feel alive.',
-      emoji: '🖼️',
-      path: '/login/',
-    },
-  ];
-
+export default function HomePage() {
   return (
-    <div className="space-y-12">
-      <section className="relative rounded-3xl overflow-hidden text-white shadow-xl border border-black/10">
-        {/* South African Flag Background */}
-        <svg
-          viewBox="0 0 900 600"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-          className="absolute inset-0 w-full h-full pointer-events-none"
-        >
-          <rect width="900" height="200" fill="#E03C31" />
-          <rect y="400" width="900" height="200" fill="#001489" />
-          <path d="M0,0 L450,300 L0,600 Z" fill="#000000" />
-          <path
-            d="M0,0 L450,300 L900,300 L900,200 L480,200 L180,0 Z M0,600 L450,300 L900,300 L900,400 L480,400 L180,600 Z"
-            fill="#FFFFFF"
-          />
-          <path
-            d="M0,0 L450,300 L900,300 L900,240 L465,240 L105,0 Z M0,600 L450,300 L900,300 L900,360 L465,360 L105,600 Z"
-            fill="#007749"
-          />
-          <path d="M0,72 L342,300 L0,528 L0,480 L270,300 L0,120 Z" fill="#FFB81C" />
-        </svg>
-        <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-
-        <div className="relative z-10 px-8 py-20 md:py-28 text-center">
-          <p className="text-sm uppercase tracking-widest text-[#FFB81C] font-bold mb-3 drop-shadow">
-            Two Hands are Better than One
-          </p>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5 drop-shadow">
-            Mzansi
-          </h1>
-          <p className="text-lg md:text-xl text-white/95 max-w-2xl mx-auto mb-10 drop-shadow">
-            Stay connected with your community — official announcements, events, groups,
-            stories, and local rewards powered by Mzansi.
-          </p>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <button
-              type="button"
-              onClick={() => goTo('/register/', 'Get started')}
-              className="inline-block bg-[#007749] text-white border-2 border-white px-7 py-3 rounded-xl font-semibold hover:bg-[#005f3a] active:scale-95 transition shadow-lg cursor-pointer touch-manipulation"
-            >
-              Get started
-            </button>
-            <button
-              type="button"
-              onClick={() => goTo('/login/', 'Sign in')}
-              className="inline-block bg-black/60 border-2 border-[#FFB81C] text-white px-7 py-3 rounded-xl font-semibold hover:bg-black/80 active:scale-95 transition shadow-lg cursor-pointer touch-manipulation"
-            >
-              Sign in
-            </button>
+    <div className="mz-common-app" style={{ gridTemplateColumns: "1fr" }}>
+      <div className="mz-content" style={{ maxWidth: 1080, width: "100%", margin: "0 auto" }}>
+        <header className="mz-topbar">
+          <Link href="/" className="mz-brand">
+            <span className="mz-brand-mark">✳</span>mzansi
+          </Link>
+          <div className="mz-top-actions">
+            <Link href="/login" className="mz-action" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>
+              Log in
+            </Link>
+            <Link href="/register" className="mz-primary">
+              Join Mzansi →
+            </Link>
           </div>
-          {statusText && (
-            <p className="mt-4 text-xs font-mono text-[#FFB81C] bg-black/75 px-3 py-2 rounded-lg break-all">
-              {statusText}
-            </p>
-          )}
-        </div>
-      </section>
+        </header>
 
-      <section className="grid md:grid-cols-3 gap-6">
-        {features.map((f) => (
-          <button
-            key={f.title}
-            type="button"
-            onClick={() => goTo(f.path, f.title)}
-            className="text-left bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-[#007749] transition cursor-pointer touch-manipulation"
-          >
-            <div className="text-3xl mb-3">{f.emoji}</div>
-            <h3 className="font-semibold mb-2">{f.title}</h3>
-            <p className="text-sm text-gray-600 leading-relaxed">{f.desc}</p>
-          </button>
-        ))}
-      </section>
+        <main style={{ padding: "48px 28px 64px" }}>
+          <section className="mz-banner" style={{ padding: "36px 32px", marginBottom: 32 }}>
+            <div className="mz-label" style={{ color: "var(--green)" }}>
+              KASIC Ecosystem · Celo Community Rewards
+            </div>
+            <h1
+              style={{
+                fontFamily: "var(--display)",
+                fontSize: "clamp(28px, 4vw, 44px)",
+                fontWeight: 800,
+                letterSpacing: "-1.5px",
+                margin: "12px 0 14px",
+                lineHeight: 1.15,
+              }}
+            >
+              Less scrolling. More belonging.
+            </h1>
+            <p className="mz-muted" style={{ maxWidth: 640, lineHeight: 1.7, margin: "0 0 24px", fontSize: 14 }}>
+              Connect in small local corners, share real stories and local commerce, and earn KASI Coin
+              rewards on Celo for meaningful community participation.
+            </p>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <Link href="/dashboard" className="mz-primary">
+                Open Community Feed →
+              </Link>
+              <Link
+                href="/register"
+                className="mz-follow"
+                style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "var(--white)" }}
+              >
+                Create account
+              </Link>
+              <Link
+                href="/login"
+                className="mz-follow"
+                style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, background: "var(--white)" }}
+              >
+                Sign in
+              </Link>
+            </div>
+          </section>
+
+          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}>
+            <div className="mz-post" style={{ marginBottom: 0 }}>
+              <div className="mz-label" style={{ color: "var(--orange)" }}>01 · LOCAL CIRCLES</div>
+              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Your little corners</h2>
+              <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
+                Focused spaces for builders, local merchants, and everyday voices across Mzansi.
+              </p>
+            </div>
+
+            <div className="mz-post" style={{ marginBottom: 0 }}>
+              <div className="mz-label" style={{ color: "var(--green)" }}>02 · KASI COIN</div>
+              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Rewards that stay local</h2>
+              <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
+                Earn KASI Coin and claim Celo rewards as you contribute to your community.
+              </p>
+            </div>
+
+            <div className="mz-post" style={{ marginBottom: 0 }}>
+              <div className="mz-label" style={{ color: "var(--ink)" }}>03 · DIRECT CONNECTION</div>
+              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Friends & messages</h2>
+              <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
+                Keep up with friends, messages, and your profile in one calm workspace.
+              </p>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
