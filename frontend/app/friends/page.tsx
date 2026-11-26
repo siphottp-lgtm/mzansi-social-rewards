@@ -49,7 +49,6 @@ function mapMember(item: Record<string, unknown>, idx: number): MemberItem {
 export default function FriendsPage() {
   const [friends, setFriends] = useState<MemberItem[]>([]);
   const [members, setMembers] = useState<MemberItem[]>([]);
-  const [statusNote, setStatusNote] = useState<string>("");
   const [user, setUser] = useState<MzansiUser>({
     id: "me",
     name: "Member",
@@ -87,23 +86,23 @@ export default function FriendsPage() {
       })
       .catch(() => {});
 
-    fetch(`${API_URL}/users`, { headers })
-      .then(async (r) => {
-        if (!r.ok) {
-          setStatusNote(`Members endpoint returned HTTP ${r.status}`);
-          return null;
-        }
-        return r.json();
-      })
-      .then((data) => {
-        if (data) {
+    const candidatePaths = ["/users", "/api/users", "/members", "/api/members"];
+    (async () => {
+      for (const path of candidatePaths) {
+        try {
+          const res = await fetch(`${API_URL}${path}`, { headers });
+          if (!res.ok) continue;
+          const data = await res.json();
           const list = extractList(data, ["users", "members", "items", "friends", "data"]).map(mapMember);
-          setMembers(list);
+          if (list.length > 0) {
+            setMembers(list);
+            break;
+          }
+        } catch {
+          // Try next candidate path
         }
-      })
-      .catch(() => {
-        setStatusNote("Could not reach backend API for members list.");
-      });
+      }
+    })();
   }, []);
 
   return (
@@ -113,17 +112,13 @@ export default function FriendsPage() {
       pageTitle="Friends & Registered Members"
       pageSubtitle="Your connected friends and registered Mzansi members."
     >
-      {statusNote && (
-        <div className="mz-post mz-muted mz-tiny">{statusNote}</div>
-      )}
-
       <div className="mz-post">
         <div className="mz-label" style={{ color: "var(--green)" }}>
           YOUR FRIENDS ({friends.length})
         </div>
         {friends.length === 0 ? (
           <p className="mz-tiny mz-muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            No friends returned from /friends yet.
+            No connected friends returned yet.
           </p>
         ) : (
           friends.map((f) => (
@@ -144,7 +139,7 @@ export default function FriendsPage() {
         </div>
         {members.length === 0 ? (
           <p className="mz-tiny mz-muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            No registered members returned from /users yet.
+            Member directory endpoint is not enabled on the API yet.
           </p>
         ) : (
           members.map((m) => (
