@@ -2,13 +2,14 @@
 
 import React from "react";
 import Link from "next/link";
-import { MzansiBrandMark } from "../components/CommonUpgrade";
+import { MzansiBrandMark, SwipeUpTaskbar, WatermarkBackdrop } from "../components/CommonUpgrade";
 import "../styles/common-upgrade.css";
 
 export default function HomePage() {
   return (
-    <div className="mz-common-app" style={{ gridTemplateColumns: "1fr" }}>
-      <div className="mz-content" style={{ maxWidth: 1080, width: "100%", margin: "0 auto" }}>
+    <div className="mz-common-app" style={{ gridTemplateColumns: "1fr", position: "relative", paddingBottom: 68, background: "transparent" }}>
+      <WatermarkBackdrop imageKey="image1" />
+      <div className="mz-content" style={{ maxWidth: 1080, width: "100%", margin: "0 auto", position: "relative", zIndex: 1 }}>
         <header className="mz-topbar">
           <MzansiBrandMark />
           <div className="mz-top-actions">
@@ -76,7 +77,7 @@ export default function HomePage() {
               <div className="mz-label" style={{ color: "var(--green)" }}>02 · KASI COIN TREE</div>
               <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Wallet & rewards</h2>
               <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
-                Access your Celo wallet connection, KASI Coin reward claims, and network details from one tree.
+                Access your Celo wallet connection, KASI Coin reward claims, and tipping from one tree.
               </p>
             </div>
 
@@ -90,6 +91,7 @@ export default function HomePage() {
           </section>
         </main>
       </div>
+      <SwipeUpTaskbar />
     </div>
   );
 }

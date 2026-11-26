@@ -1,4 +1,5 @@
-﻿'use client';
+﻿import { MzansiBrandMark, SwipeUpTaskbar, WatermarkBackdrop } from '../../components/CommonUpgrade';
+'use client';
 
 import { useState } from 'react';
 import { auth } from '@/lib/api';
@@ -29,8 +30,7 @@ export default function RegisterPage() {
     }
   }
 
-  return (
-    <div className="max-w-md mx-auto">
+  return (`n    <div style={{ position: "relative", minHeight: "100vh", paddingBottom: 68 }}>`n      <WatermarkBackdrop imageKey="image2" />`n      <div style={{ position: "relative", zIndex: 1 }}>`n        <div style={{ padding: "16px 24px" }}><MzansiBrandMark compact /></div>`n        <div className="max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-6">Create Mzansi account</h1>
       <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border">
         {error && <p className="text-red-600 text-sm break-words">{error}</p>}
@@ -85,5 +85,4 @@ export default function RegisterPage() {
         Already have an account? <a href="/login/" className="text-[#007749] font-semibold">Sign in</a>
       </p>
     </div>
-  );
-}
+        </div>`n      <SwipeUpTaskbar />`n    </div>`n  );`n}

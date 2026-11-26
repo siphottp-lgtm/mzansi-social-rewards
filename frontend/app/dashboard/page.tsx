@@ -191,7 +191,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <CommonUpgrade
+    <CommonUpgrade watermarkKey="image1"
       currentUser={user}
       posts={posts}
       spaces={DEFAULT_SPACES}
@@ -205,3 +205,4 @@ export default function DashboardPage() {
     />
   );
 }
+
