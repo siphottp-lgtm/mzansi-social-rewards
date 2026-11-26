@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { auth } from '@/lib/api';
@@ -49,6 +49,11 @@ export default function LoginPage() {
             className="w-full border rounded-lg px-3 py-2"
             required
           />
+          <div className="mt-1 text-right">
+            <a href="/forgot-password/" className="text-xs text-[#007749] font-semibold hover:underline">
+              Forgot password?
+            </a>
+          </div>
         </div>
         <button
           type="submit"
