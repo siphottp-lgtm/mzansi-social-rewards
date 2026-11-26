@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,6 +14,7 @@ import { User } from '../common/entities/user.entity';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly resetSecret =
     process.env.JWT_SECRET || 'dev-secret-change-me-in-production';
 
@@ -69,9 +71,9 @@ export class AuthService {
       where: { email: normalizedEmail, deletedAt: IsNull() },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user || !user.passwordHash || !user.email) {
       return {
-        message: 'If an account with that email exists, a password reset token has been generated.',
+        message: 'If an account with that email exists, a password reset link has been sent.',
       };
     }
 
@@ -83,16 +85,30 @@ export class AuthService {
     const sig = this.signResetPayload(payload, user.passwordHash);
     const resetToken = `${payload}.${sig}`;
 
+    const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+    const resetUrl = `${frontendBase}/reset-password/?token=${encodeURIComponent(resetToken)}`;
+
+    const emailSent = await this.sendPasswordResetEmail(user.email, resetUrl);
+    if (emailSent) {
+      return {
+        message: 'If an account with that email exists, a password reset link has been sent.',
+      };
+    }
+
+    // Fallback when RESEND_API_KEY is not configured yet
     return {
-      message: 'Password reset token generated. Use it within 1 hour to set a new password.',
+      message: 'Reset link generated (email provider not configured; use the token below within 1 hour).',
       resetToken,
+      resetUrl,
       expiresAt,
     };
   }
 
   async resetPassword(token: string, newPassword: string) {
     if (!token || !newPassword || newPassword.length < 8) {
-      throw new BadRequestException('A valid reset token and a password of at least 8 characters are required.');
+      throw new BadRequestException(
+        'A valid reset token and a password of at least 8 characters are required.',
+      );
     }
 
     const parts = token.trim().split('.');
@@ -137,6 +153,43 @@ export class AuthService {
 
   async validateUser(userId: string): Promise<User | null> {
     return this.usersRepo.findOne({ where: { id: userId, deletedAt: null as any } });
+  }
+
+  private async sendPasswordResetEmail(toEmail: string, resetUrl: string): Promise<boolean> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return false;
+
+    const fromAddress = process.env.MAIL_FROM || 'Mzansi Community <onboarding@resend.dev>';
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject: 'Reset your Mzansi password',
+          html: `
+            <p>We received a request to reset your password.</p>
+            <p><a href="${resetUrl}">Click here to reset your password</a> (valid for 1 hour).</p>
+            <p>If you did not request this, you can safely ignore this email.</p>
+          `,
+          text: `Reset your Mzansi password (valid for 1 hour): ${resetUrl}`,
+        }),
+      });
+
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        this.logger.warn(`Resend API returned ${res.status}: ${bodyText}`);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      this.logger.warn(`Failed to send password reset email: ${err?.message || err}`);
+      return false;
+    }
   }
 
   private signResetPayload(payloadB64: string, passwordHash: string): string {
