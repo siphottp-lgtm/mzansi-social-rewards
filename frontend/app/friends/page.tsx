@@ -33,8 +33,10 @@ function mapMember(item: Record<string, unknown>, idx: number): MemberItem {
   const nested = (item.user || item.friend || item.member) as Record<string, unknown> | undefined;
   const raw = nested && typeof nested === "object" ? { ...item, ...nested } : item;
   const fullName =
+    raw.displayName ||
     raw.name ||
     raw.fullName ||
+    [raw.firstName, raw.lastName].filter(Boolean).join(" ") ||
     raw.username ||
     (typeof raw.email === "string" ? raw.email.split("@")[0] : undefined) ||
     `Member ${idx + 1}`;
@@ -66,7 +68,14 @@ export default function FriendsPage() {
       .then((data) => {
         if (data && typeof data === "object") {
           const obj = data as Record<string, unknown>;
-          const displayName = String(obj.name || obj.fullName || obj.email || "Member");
+          const displayName = String(
+            obj.displayName ||
+              obj.name ||
+              obj.fullName ||
+              [obj.firstName, obj.lastName].filter(Boolean).join(" ") ||
+              obj.email ||
+              "Member"
+          );
           setUser({
             id: String(obj.id || "me"),
             name: displayName,
@@ -86,14 +95,14 @@ export default function FriendsPage() {
       })
       .catch(() => {});
 
-    const candidatePaths = ["/users", "/api/users", "/members", "/api/members"];
+    const candidatePaths = ["/users/directory", "/users", "/api/users", "/members"];
     (async () => {
       for (const path of candidatePaths) {
         try {
           const res = await fetch(`${API_URL}${path}`, { headers });
           if (!res.ok) continue;
           const data = await res.json();
-          const list = extractList(data, ["users", "members", "items", "friends", "data"]).map(mapMember);
+          const list = extractList(data, ["users", "members", "directory", "items", "friends", "data"]).map(mapMember);
           if (list.length > 0) {
             setMembers(list);
             break;
@@ -139,7 +148,7 @@ export default function FriendsPage() {
         </div>
         {members.length === 0 ? (
           <p className="mz-tiny mz-muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            Member directory endpoint is not enabled on the API yet.
+            No registered members returned from /users/directory yet.
           </p>
         ) : (
           members.map((m) => (
