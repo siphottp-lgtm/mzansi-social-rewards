@@ -1,1490 +1,181 @@
-'use client';
+﻿"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from "react";
+import { CommonUpgrade, type MzansiPost, type MzansiSpace, type MzansiUser, type SuggestedMember } from "../../components/CommonUpgrade";
+import { claimKasicTaskReward } from "../../lib/celoRewards";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-const resolveMediaUrl = (url?: string): string => {
-  if (!url) return '';
-  if (url.startsWith('/uploads/')) {
-    return `${API_URL.replace(/\/+$/, '')}${url}`;
-  }
-  return url.replace(/^http:\/\/localhost:3001(?=\/uploads\/)/i, API_URL.replace(/\/+$/, ''));
-};
+const DEFAULT_SPACES: MzansiSpace[] = [
+  { id: "kasi-builders", name: "Kasi Builders", icon: "✺" },
+  { id: "local-merchants", name: "Local Merchants", icon: "↟", badgeBg: "#eadfcd" },
+  { id: "celo-rewards", name: "Celo Rewards Hub", icon: "〰", badgeBg: "#e9dbd7" },
+];
+
+const INITIAL_POSTS: MzansiPost[] = [
+  {
+    id: 1,
+    name: "Thabo Mokoena",
+    initials: "TM",
+    color: "green",
+    time: "1 hour ago",
+    space: "Kasi Builders",
+    following: true,
+    text: "Excited to test Mzansi Social Rewards on Celo! Supporting local township businesses and earning verified KASI Coin milestones.",
+    tag: "#MzansiCelo",
+    likes: 24,
+    comments: 3,
+  },
+  {
+    id: 2,
+    name: "Lerato Ndlovu",
+    initials: "LN",
+    color: "pink",
+    time: "3 hours ago",
+    space: "Local Merchants",
+    following: false,
+    text: "Our local spot is ready for KASIC loyalty rewards. Community commerce works best when value stays local.",
+    tag: "#SupportLocal",
+    likes: 41,
+    comments: 6,
+  },
+];
+
+const SUGGESTED: SuggestedMember[] = [
+  { id: "1", name: "Sipho Nkosi", role: "Celo Builder · JHB", initials: "SN", color: "pink", following: false },
+  { id: "2", name: "Zanele Khumalo", role: "Local Merchant · PTA", initials: "ZK", color: "blue", following: false },
+  { id: "3", name: "Kabelo Dlamini", role: "Community Lead", initials: "KD", color: "green", following: true },
+];
+
 export default function DashboardPage() {
-  const [posts, setPosts] = useState<any[]>([]);
-  const [stories, setStories] = useState<any[]>([]);
-  const [groups, setGroups] = useState<any[]>([]);
-  const [pages, setPages] = useState<any[]>([]);
-  const [newPostContent, setNewPostContent] = useState('');
-  const [postImageFile, setPostImageFile] = useState<File | null>(null);
-  const [postImagePreview, setPostImagePreview] = useState<string>('');
-  const [uploadingPostImage, setUploadingPostImage] = useState(false);
-  const postFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeModal, setActiveModal] = useState<'group' | 'page' | 'story' | null>(null);
-  const [submittingModal, setSubmittingModal] = useState(false);
-  const [viewingItem, setViewingItem] = useState<{ type: 'group' | 'page' | 'story'; data: any } | null>(null);
-  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
-  const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({});
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [editingPostBody, setEditingPostBody] = useState<string>('');
-  const [savingPostEditId, setSavingPostEditId] = useState<string | null>(null);
-  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
-  const [editingCommentKey, setEditingCommentKey] = useState<string | null>(null);
-  const [editingCommentBody, setEditingCommentBody] = useState<string>('');
-  const [savingCommentEditKey, setSavingCommentEditKey] = useState<string | null>(null);
-  const [deletingCommentKey, setDeletingCommentKey] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<boolean>(false);
-  const [editItemTitle, setEditItemTitle] = useState<string>('');
-  const [editItemDesc, setEditItemDesc] = useState<string>('');
-  const [editItemPrivacy, setEditItemPrivacy] = useState<string>('public');
-  const [savingItemEdit, setSavingItemEdit] = useState<boolean>(false);
-  const [deletingItem, setDeletingItem] = useState<boolean>(false);
-  const [shareToast, setShareToast] = useState<string>('');
-  const [statusBanner, setStatusBanner] = useState<string>('');
-  const [groupPagePosts, setGroupPagePosts] = useState<any[]>([]);
-  const [groupPagePostBody, setGroupPagePostBody] = useState<string>('');
-  const [postingInItem, setPostingInItem] = useState<boolean>(false);
-  const [itemPostImageFile, setItemPostImageFile] = useState<File | null>(null);
-  const [itemPostImagePreview, setItemPostImagePreview] = useState<string>('');
-  const itemPostFileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [titleInput, setTitleInput] = useState('');
-  const [descInput, setDescInput] = useState('');
-  const openCreateModal = (type: 'group' | 'page' | 'story') => {
-    setTitleInput('');
-    setDescInput('');
-    setActiveModal(type);
-  };
-
-  const getToken = () =>
-    typeof window !== 'undefined'
-      ? localStorage.getItem('token') || localStorage.getItem('access_token')
-      : null;
-
-  const fetchAllData = async () => {
-    const token = getToken();
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-
-    try {
-      if (token) {
-        fetch(`${API_URL}/users/me`, { headers })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((me) => {
-            if (me?.id) setCurrentUserId(me.id);
-          })
-          .catch(() => {});
-      }
-
-      const [storiesRes, groupsRes, pagesRes, postsRes] = await Promise.all([
-        fetch(`${API_URL}/stories`),
-        fetch(`${API_URL}/groups`),
-        fetch(`${API_URL}/pages`),
-        fetch(`${API_URL}/posts`, { headers }),
-      ]);
-
-      if (storiesRes.ok) setStories(await storiesRes.json());
-      if (groupsRes.ok) setGroups(await groupsRes.json());
-      if (pagesRes.ok) setPages(await pagesRes.json());
-      if (postsRes.ok) setPosts(await postsRes.json());
-    } catch (err) {
-      console.error('Failed to load feed data:', err);
-    }
-  };
+  const [user, setUser] = useState<MzansiUser>({
+    id: "member-1",
+    name: "Mzansi Builder",
+    handle: "@mzansi",
+    initials: "MB",
+    avatarColor: "green",
+  });
+  const [posts, setPosts] = useState<MzansiPost[]>(INITIAL_POSTS);
+  const [suggestions, setSuggestions] = useState<SuggestedMember[]>(SUGGESTED);
 
   useEffect(() => {
-    fetchAllData();
+    const token = localStorage.getItem("token");
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+    fetch(`${API_URL}/users/me`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.name || data?.email) {
+          const displayName = data.name || data.email.split("@")[0];
+          const initials = displayName.slice(0, 2).toUpperCase();
+          setUser({
+            id: data.id || "me",
+            name: displayName,
+            handle: `@${displayName.toLowerCase().replace(/\s+/g, "")}`,
+            initials,
+            avatarColor: "green",
+          });
+        }
+      })
+      .catch(() => {});
+
+    fetch(`${API_URL}/posts`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: MzansiPost[] = data.map((p: Record<string, unknown>, idx: number) => {
+            const authorObj = p.author as { name?: string } | undefined;
+            const authorName = authorObj?.name || String(p.authorName || "Mzansi Member");
+            return {
+              id: (p.id as string | number) || idx + 100,
+              name: authorName,
+              initials: authorName.slice(0, 2).toUpperCase(),
+              color: "green",
+              time: "Recently",
+              space: "Kasi Builders",
+              following: true,
+              text: String(p.content || p.text || ""),
+              likes: Number(p.likesCount || 0),
+              comments: 0,
+            };
+          });
+          setPosts([...mapped, ...INITIAL_POSTS]);
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  const handlePostFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be 5 MB or smaller.');
-      e.target.value = '';
-      return;
+  const handleCreatePost = async (payload: { text: string; space: string; image?: string }) => {
+    const newPost: MzansiPost = {
+      id: Date.now(),
+      name: user.name,
+      initials: user.initials,
+      color: user.avatarColor,
+      time: "Just now",
+      space: payload.space,
+      following: true,
+      text: payload.text,
+      likes: 0,
+      comments: 0,
+      image: payload.image,
+    };
+    setPosts((prev) => [newPost, ...prev]);
+
+    const token = localStorage.getItem("token");
+    if (token) {
+      await fetch(`${API_URL}/posts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content: payload.text }),
+      }).catch(() => {});
     }
-    setPostImageFile(file);
-    setPostImagePreview(URL.createObjectURL(file));
   };
 
-  const handleClearPostImage = () => {
-    setPostImageFile(null);
-    setPostImagePreview('');
-    if (postFileInputRef.current) {
-      postFileInputRef.current.value = '';
-    }
+  const handleToggleLike = (postId: string | number) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, liked: !p.liked, likes: p.likes + (!p.liked ? 1 : -1) } : p))
+    );
   };
 
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedBody = newPostContent.trim();
-    if (!trimmedBody && !postImageFile) return;
+  const handleToggleSave = (postId: string | number) => {
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, saved: !p.saved } : p)));
+  };
 
-    const token = getToken();
-    if (!token) {
-      alert('Please log in first to create a post.');
-      return;
-    }
+  const handleAddComment = (postId: string | number, text: string) => {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, comments: p.comments + 1, replies: [...(p.replies ?? []), { author: user.name, text }] }
+          : p
+      )
+    );
+  };
 
+  const handleToggleFollow = (memberId: string) => {
+    setSuggestions((prev) => prev.map((m) => (m.id === memberId ? { ...m, following: !m.following } : m)));
+  };
+
+  const handleClaimReward = async () => {
     try {
-      let imageUrl: string | undefined;
-
-      if (postImageFile) {
-        setUploadingPostImage(true);
-        const formData = new FormData();
-        formData.append('file', postImageFile);
-
-        const uploadRes = await fetch(`${API_URL}/uploads/posts`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        setUploadingPostImage(false);
-
-        if (!uploadRes.ok) {
-          const uploadErr = await uploadRes.json().catch(() => ({}));
-          alert(`Could not upload photo: ${uploadErr.message || 'Check file type or size'}`);
-          return;
-        }
-
-        const uploaded = await uploadRes.json();
-        imageUrl = uploaded.url;
-      }
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-
-      const res = await fetch(`${API_URL}/posts`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          body: trimmedBody || 'Shared a photo',
-          ...(imageUrl ? { imageUrl } : {}),
-        }),
-      });
-
-      if (res.ok) {
-        setNewPostContent('');
-        handleClearPostImage();
-        fetchAllData();
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        alert(`Could not create post: ${errData.message || 'Check required fields'}`);
-      }
-    } catch (err) {
-      setUploadingPostImage(false);
-      console.error(err);
-    }
-  };
-
-    const loadComments = async (postId: string) => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}/comments`, {
-        headers: { Authorization: `Bearer ${token}`},
-      });
-      if (res.ok) {
-        const list = await res.json();
-        setCommentsByPost((prev) => ({ ...prev, [postId]: Array.isArray(list) ? list : [] }));
-      }
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-    }
-  };
-
-  const handleToggleLike = async (postId: string) => {
-    const token = getToken();
-    if (!token) {
-      alert('Please log in first to like posts.');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}/like`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, likedByMe: data.liked, likesCount: data.likesCount }
-              : p,
-          ),
-        );
-      }
-    } catch (err) {
-      console.error('Like error:', err);
-    }
-  };
-
-  const handleToggleComments = async (postId: string) => {
-    if (openCommentsPostId === postId) {
-      setOpenCommentsPostId(null);
-      return;
-    }
-    setOpenCommentsPostId(postId);
-    await loadComments(postId);
-  };
-
-  const handleAddComment = async (e: React.FormEvent, postId: string) => {
-    e.preventDefault();
-    const token = getToken();
-    if (!token) {
-      alert('Please log in first to comment.');
-      return;
-    }
-    const text = (commentDrafts[postId] || '').trim();
-    if (!text || submittingCommentId === postId) return;
-
-    setSubmittingCommentId(postId);
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ body: text }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
-        if (data.comment) {
-          setCommentsByPost((prev) => ({
-            ...prev,
-            [postId]: [...(prev[postId] || []), data.comment],
-          }));
-        }
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, commentsCount: data.commentsCount ?? (p.commentsCount || 0) + 1 }
-              : p,
-          ),
-        );
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        alert(`Could not post comment: ${errData.message || "Please try again"}`);
-      }
-    } catch (err) {
-      console.error('Comment error:', err);
-    } finally {
-      setSubmittingCommentId(null);
-    }
-  };
-
-  const handleStartEditPost = (post: any) => {
-    setEditingPostId(post.id);
-    setEditingPostBody(post.body || '');
-  };
-
-  const handleCancelEditPost = () => {
-    setEditingPostId(null);
-    setEditingPostBody('');
-  };
-
-  const handleSaveEditPost = async (postId: string) => {
-    const token = getToken();
-    const trimmed = editingPostBody.trim();
-    if (!token || !trimmed || savingPostEditId) return;
-
-    setSavingPostEditId(postId);
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ body: trimmed }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...updated } : p)));
-        setGroupPagePosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...updated } : p)));
-        setEditingPostId(null);
-        setEditingPostBody('');
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not update post.');
-      }
-    } catch (err) {
-      console.error('Edit post error:', err);
-    } finally {
-      setSavingPostEditId(null);
-    }
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    const token = getToken();
-    if (!token || deletingPostId) return;
-    if (typeof window !== 'undefined' && !window.confirm('Delete this post?')) return;
-
-    setDeletingPostId(postId);
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
-        setGroupPagePosts((prev) => prev.filter((p) => p.id !== postId));
-        if (openCommentsPostId === postId) setOpenCommentsPostId(null);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not delete post.');
-      }
-    } catch (err) {
-      console.error('Delete post error:', err);
-    } finally {
-      setDeletingPostId(null);
-    }
-  };
-
-  const handleStartEditComment = (postId: string, comment: any) => {
-    setEditingCommentKey(`${postId}:${comment.id}`);
-    setEditingCommentBody(comment.body || '');
-  };
-
-  const handleCancelEditComment = () => {
-    setEditingCommentKey(null);
-    setEditingCommentBody('');
-  };
-
-  const handleSaveEditComment = async (postId: string, commentId: string) => {
-    const token = getToken();
-    const trimmed = editingCommentBody.trim();
-    const key = `${postId}:${commentId}`;
-    if (!token || !trimmed || savingCommentEditKey) return;
-
-    setSavingCommentEditKey(key);
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}/comments/${commentId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ body: trimmed }),
-      });
-      if (res.ok) {
-        const updatedComment = await res.json();
-        setCommentsByPost((prev) => ({
-          ...prev,
-          [postId]: (prev[postId] || []).map((c: any) =>
-            c.id === commentId ? { ...c, ...updatedComment } : c,
-          ),
-        }));
-        setEditingCommentKey(null);
-        setEditingCommentBody('');
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not update comment.');
-      }
-    } catch (err) {
-      console.error('Edit comment error:', err);
-    } finally {
-      setSavingCommentEditKey(null);
-    }
-  };
-
-  const handleDeleteComment = async (postId: string, commentId: string) => {
-    const token = getToken();
-    const key = `${postId}:${commentId}`;
-    if (!token || deletingCommentKey) return;
-    if (typeof window !== 'undefined' && !window.confirm('Delete this comment?')) return;
-
-    setDeletingCommentKey(key);
-    try {
-      const res = await fetch(`${API_URL}/posts/${postId}/comments/${commentId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setCommentsByPost((prev) => ({
-          ...prev,
-          [postId]: (prev[postId] || []).filter((c: any) => c.id !== commentId),
-        }));
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  commentsCount:
-                    typeof data.commentsCount === 'number'
-                      ? data.commentsCount
-                      : Math.max(0, (p.commentsCount || 1) - 1),
-                }
-              : p,
-          ),
-        );
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || 'Could not delete comment.');
-      }
-    } catch (err) {
-      console.error('Delete comment error:', err);
-    } finally {
-      setDeletingCommentKey(null);
-    }
-  };
-
-  const handleStartEditItem = () => {
-    if (!viewingItem || (viewingItem.type !== 'group' && viewingItem.type !== 'page')) return;
-    setEditItemTitle(viewingItem.data.name || viewingItem.data.title || '');
-    setEditItemDesc(viewingItem.data.description || viewingItem.data.bio || '');
-    setEditItemPrivacy(viewingItem.data.privacy || 'public');
-    setEditingItem(true);
-  };
-
-  const handleSaveEditItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = getToken();
-    const trimmedTitle = editItemTitle.trim();
-    if (!token || !viewingItem || !trimmedTitle || savingItemEdit) return;
-    if (viewingItem.type !== 'group' && viewingItem.type !== 'page') return;
-
-    setSavingItemEdit(true);
-    try {
-      const endpoint =
-        viewingItem.type === 'group'
-          ? `/groups/${viewingItem.data.id}`
-          : `/pages/${viewingItem.data.id}`;
-      const payload =
-        viewingItem.type === 'group'
-          ? { name: trimmedTitle, description: editItemDesc, privacy: editItemPrivacy }
-          : { title: trimmedTitle, bio: editItemDesc };
-
-      const res = await fetch(`${API_URL}${endpoint}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const updated = await res.json();
-        if (viewingItem.type === 'group') {
-          setGroups((prev) => prev.map((g) => (g.id === updated.id ? { ...g, ...updated } : g)));
-        } else {
-          setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
-        }
-        setViewingItem({ type: viewingItem.type, data: { ...viewingItem.data, ...updated } });
-        setEditingItem(false);
-        setStatusBanner(
-          `${viewingItem.type === 'group' ? 'Group' : 'Page'} "${updated.name || updated.title}" updated!`,
-        );
-        setTimeout(() => setStatusBanner(''), 3500);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || `Could not update ${viewingItem.type}.`);
-      }
-    } catch (err) {
-      console.error('Update group/page error:', err);
-    } finally {
-      setSavingItemEdit(false);
-    }
-  };
-
-  const handleDeleteItem = async () => {
-    const token = getToken();
-    if (!token || !viewingItem || deletingItem) return;
-    if (viewingItem.type !== 'group' && viewingItem.type !== 'page') return;
-
-    const label = viewingItem.data.name || viewingItem.data.title || viewingItem.type;
-    if (typeof window !== 'undefined' && !window.confirm(`Delete ${viewingItem.type} "${label}"?`)) {
-      return;
-    }
-
-    setDeletingItem(true);
-    try {
-      const endpoint =
-        viewingItem.type === 'group'
-          ? `/groups/${viewingItem.data.id}`
-          : `/pages/${viewingItem.data.id}`;
-      const res = await fetch(`${API_URL}${endpoint}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.ok) {
-        const deletedId = viewingItem.data.id;
-        const deletedType = viewingItem.type;
-        if (deletedType === 'group') {
-          setGroups((prev) => prev.filter((g) => g.id !== deletedId));
-        } else {
-          setPages((prev) => prev.filter((p) => p.id !== deletedId));
-        }
-        setViewingItem(null);
-        setEditingItem(false);
-        setStatusBanner(`${deletedType === 'group' ? 'Group' : 'Page'} "${label}" deleted.`);
-        setTimeout(() => setStatusBanner(''), 3500);
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.message || `Could not delete ${viewingItem.type}.`);
-      }
-    } catch (err) {
-      console.error('Delete group/page error:', err);
-    } finally {
-      setDeletingItem(false);
-    }
-  };
-
-  const handleSharePost = async (post: any) => {
-    const token = getToken();
-    if (!token) {
-      alert('Please log in first to share posts.');
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}/posts/${post.id}/share`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`},
-      });
-      let updatedCount = (post.sharesCount || 0) + 1;
-      if (res.ok) {
-        const data = await res.json();
-        if (typeof data.sharesCount === 'number') updatedCount = data.sharesCount;
-      }
-      setPosts((prev) =>
-        prev.map((p) => (p.id === post.id ? { ...p, sharesCount: updatedCount } : p)),
-      );
-
-      const shareUrl = typeof window !== 'undefined' ? window.location.href : 'https://mzansi-social-rewards.vercel.app';
-      const shareText = `${post.author?.fullName || "Mzansi Member"} on Mzansi: ${post.body}`;
-      if (typeof navigator !== 'undefined' && navigator.share) {
-        try {
-          await navigator.share({ title: 'Mzansi Post', text: shareText, url: shareUrl });
-        } catch {
-          // User cancelled share sheet
-        }
-      } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(`${shareText} (${shareUrl})`);
-      }
-      setShareToast('Post shared!');
-      setTimeout(() => setShareToast(''), 2500);
-    } catch (err) {
-      console.error('Share error:', err);
-    }
-  };
-
-    useEffect(() => {
-    const token = getToken();
-    setEditingItem(false);
-    if (!token || !viewingItem || (viewingItem.type !== 'group' && viewingItem.type !== 'page')) {
-      setGroupPagePosts([]);
-      return;
-    }
-    const param =
-      viewingItem.type === 'group'
-        ? `groupId=${encodeURIComponent(viewingItem.data.id)}`
-        : `pageId=${encodeURIComponent(viewingItem.data.id)}`;
-
-    fetch(`${API_URL}/posts?${param}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list) => setGroupPagePosts(Array.isArray(list) ? list : []))
-      .catch(() => setGroupPagePosts([]));
-  }, [viewingItem]);
-
-  const handleItemPostFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be 5 MB or smaller.');
-      e.target.value = '';
-      return;
-    }
-    setItemPostImageFile(file);
-    setItemPostImagePreview(URL.createObjectURL(file));
-  };
-
-  const handleClearItemPostImage = () => {
-    setItemPostImageFile(null);
-    setItemPostImagePreview('');
-    if (itemPostFileInputRef.current) {
-      itemPostFileInputRef.current.value = '';
-    }
-  };
-
-  const handleCreateItemPost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = getToken();
-    if (!token || !viewingItem || postingInItem) return;
-    const text = groupPagePostBody.trim();
-    if (!text && !itemPostImageFile) return;
-
-    setPostingInItem(true);
-    try {
-      let imageUrl: string | undefined;
-
-      if (itemPostImageFile) {
-        const formData = new FormData();
-        formData.append('file', itemPostImageFile);
-
-        const uploadRes = await fetch(`${API_URL}/uploads/posts`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        if (!uploadRes.ok) {
-          const uploadErr = await uploadRes.json().catch(() => ({}));
-          alert(`Could not upload photo: ${uploadErr.message || 'Check file type or size'}`);
-          return;
-        }
-
-        const uploaded = await uploadRes.json();
-        imageUrl = uploaded.url;
-      }
-
-      const payload: any = {
-        body: text || 'Shared a photo',
-        postType: 'discussion',
-        ...(imageUrl ? { imageUrl } : {}),
-      };
-      if (viewingItem.type === 'group') payload.groupId = viewingItem.data.id;
-      if (viewingItem.type === 'page') payload.pageId = viewingItem.data.id;
-
-      const res = await fetch(`${API_URL}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        const created = await res.json();
-        setGroupPagePostBody('');
-        handleClearItemPostImage();
-        setGroupPagePosts((prev) => [created, ...prev]);
-        setStatusBanner(
-          `Posted inside ${viewingItem.type === 'group' ? 'group' : 'page'} "${
-            viewingItem.data.name || viewingItem.data.title
-          }"!`,
-        );
-        setTimeout(() => setStatusBanner(''), 3500);
-      }
-    } catch (err) {
-      console.error('Error posting in group/page:', err);
-    } finally {
-      setPostingInItem(false);
-    }
-  };
-
-  const handleModalSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = getToken();
-    if (!token) {
-      alert('Please log in first.');
-      return;
-    }
-
-    let endpoint = '';
-    let payload: any = {};
-
-    if (activeModal === 'group') {
-      endpoint = '/groups';
-      payload = { name: titleInput, description: descInput, privacy: 'public' };
-    } else if (activeModal === 'page') {
-      endpoint = '/pages';
-      payload = { title: titleInput, bio: descInput, category: 'Mzansi' };
-    } else if (activeModal === 'story') {
-      endpoint = '/stories';
-      payload = {
-        mediaUrl:
-          titleInput ||
-          'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400',
-        caption: descInput,
-      };
-    }
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      };
-
-      const res = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      if (res.ok) {
-        setTitleInput('');
-        setDescInput('');
-        setActiveModal(null);
-        fetchAllData();
-      } else {
-        const errData = await res.json();
-        alert(`Error: ${errData.message || 'Failed to create'}`);
-      }
-    } catch (err) {
-      console.error(err);
+      const txHash = await claimKasicTaskReward("daily-community-engagement");
+      alert(`KASIC Reward claimed on Celo! Tx: ${txHash}`);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Connect Celo wallet to claim.");
     }
   };
 
   return (
-    <div className="min-h-screen text-gray-800 relative bg-gray-100 pb-20 md:pb-0">
-      {/* South African Flag Background Layer */}
-      <div
-        className="fixed inset-0 z-0 pointer-events-none opacity-25"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 600'%3E%3Crect width='900' height='200' fill='%23E03C31'/%3E%3Crect y='400' width='900' height='200' fill='%23001489'/%3E%3Cpath d='M0,0 L450,300 L0,600 Z' fill='%23000000'/%3E%3Cpath d='M0,0 L450,300 L900,300 L900,200 L480,200 L180,0 Z M0,600 L450,300 L900,300 L900,400 L480,400 L180,600 Z' fill='%23FFFFFF'/%3E%3Cpath d='M0,0 L450,300 L900,300 L900,240 L465,240 L105,0 Z M0,600 L450,300 L900,300 L900,360 L465,360 L105,600 Z' fill='%23007749'/%3E%3Cpath d='M0,72 L342,300 L0,528 L0,480 L270,300 L0,120 Z' fill='%23FFB81C'/%3E%3C/svg%3E")`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundAttachment: 'fixed',
-        }}
-      />
-
-      {/* Top Navbar */}
-      <header className="bg-white/95 backdrop-blur-sm shadow-sm sticky top-0 z-50 px-4 md:px-6 py-3 flex items-center justify-between border-b-2 border-[#007749]">
-        <div className="flex flex-col">
-          <span className="text-[10px] md:text-xs font-bold tracking-widest text-gray-500 uppercase">
-            Jacinta Z M Zuma
-          </span>
-          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight flex items-center gap-1.5">
-            <span>🇿🇦</span>
-            <span className="bg-gradient-to-r from-[#007749] via-[#FFB81C] to-[#E03C31] bg-clip-text text-transparent">
-              Mzansi
-            </span>
-          </h1>
-          <span className="text-[11px] md:text-xs italic text-[#001489] font-semibold">
-            "Two Hands are Better than One"
-          </span>
-        </div>
-
-        <div className="hidden md:flex items-center gap-6">
-          <a href="/dashboard" className="font-semibold text-[#007749]">Home</a>
-          <a href="/messages" className="text-gray-600 hover:text-[#007749]">Messages</a>
-          <a href="/profile" className="text-gray-600 hover:text-[#007749]">Profile</a>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="relative z-10 max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 p-2 md:p-4">
-        {/* Left Sidebar */}
-        <div className="hidden md:block col-span-1 space-y-4 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm h-fit">
-          <div>
-            <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider mb-2">Menu</h2>
-            <a href="/dashboard" className="block p-2 rounded-lg hover:bg-gray-100 font-medium">📰 News Feed</a>
-            <a href="/messages" className="block p-2 rounded-lg hover:bg-gray-100 font-medium">💬 Messenger</a>
-            <a href="/profile" className="block p-2 rounded-lg hover:bg-gray-100 font-medium">👤 Profile</a>
-          </div>
-
-          <hr />
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider">Groups</h2>
-              <button onClick={() => openCreateModal('group')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
-            </div>
-            {groups.length === 0 ? <p className="text-xs text-gray-400 px-2">No groups yet</p> : groups.map((g) => (
-              <div key={g.id} onClick={() => setViewingItem({ type: 'group', data: g })} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">👥 {g.name}</div>
-            ))}
-          </div>
-
-          <hr />
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider">Pages</h2>
-              <button onClick={() => openCreateModal('page')} className="text-xs text-[#007749] font-semibold hover:underline">+ Create</button>
-            </div>
-            {pages.length === 0 ? <p className="text-xs text-gray-400 px-2">No pages yet</p> : pages.map((p) => (
-              <div key={p.id} onClick={() => setViewingItem({ type: 'page', data: p })} className="p-2 rounded-lg hover:bg-gray-100 text-sm font-medium truncate">📄 {p.title}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* Center Column */}
-        <div className="col-span-1 md:col-span-2 space-y-4 md:space-y-6">
-                    {/* Mobile Groups & Pages Strip */}
-          {statusBanner && (
-            <div className="bg-green-50 border border-[#007749]/40 text-[#007749] text-xs md:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm">
-              {statusBanner}
-            </div>
-          )}
-
-          <div className="md:hidden bg-white/95 backdrop-blur-sm p-3 rounded-xl shadow-sm space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Groups ({groups.length})</span>
-                <button type="button" onClick={() => openCreateModal('group')} className="text-xs font-semibold text-[#007749]">+ Create</button>
-              </div>
-              {groups.length === 0 ? (
-                <p className="text-xs text-gray-400">No groups yet</p>
-              ) : (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {groups.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      onClick={() => setViewingItem({ type: 'group', data: g })}
-                      className="px-3 py-1.5 rounded-full bg-green-50 text-[#007749] text-xs font-semibold whitespace-nowrap shrink-0"
-                    >
-                      👥 {g.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t pt-2.5">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Pages ({pages.length})</span>
-                <button type="button" onClick={() => openCreateModal('page')} className="text-xs font-semibold text-[#007749]">+ Create</button>
-              </div>
-              {pages.length === 0 ? (
-                <p className="text-xs text-gray-400">No pages yet</p>
-              ) : (
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {pages.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setViewingItem({ type: 'page', data: p })}
-                      className="px-3 py-1.5 rounded-full bg-blue-50 text-[#001489] text-xs font-semibold whitespace-nowrap shrink-0"
-                    >
-                      📄 {p.title}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Stories Bar */}
-          <div className="flex gap-2 md:gap-3 overflow-x-auto pb-2 scrollbar-none">
-            <button
-              onClick={() => openCreateModal('story')}
-              className="w-24 h-40 md:w-28 md:h-44 bg-white/95 backdrop-blur-sm rounded-xl shadow-sm flex flex-col items-center justify-center p-2 cursor-pointer shrink-0 border hover:border-[#007749] transition"
-            >
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-green-100 text-[#007749] rounded-full flex items-center justify-center font-bold text-lg md:text-xl mb-2">+</div>
-              <span className="text-[11px] md:text-xs font-semibold text-center">Create Story</span>
-            </button>
-
-            {stories.map((story) => (
-              <div onClick={() => setViewingItem({ type: 'story', data: story })}
-                key={story.id}
-                style={{ backgroundImage: `url(${story.mediaUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                className="w-24 h-40 md:w-28 md:h-44 bg-[#007749] rounded-xl shadow-sm relative overflow-hidden shrink-0 flex flex-col justify-end p-2 text-white"
-              >
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                <span className="relative z-10 text-[11px] md:text-xs font-bold drop-shadow truncate">
-                  {story.authorName || story.user?.displayName || story.user?.fullName || story.caption || 'Story'}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Create Post Box */}
-          <div className="bg-white/95 backdrop-blur-sm p-3 md:p-4 rounded-xl shadow-sm">
-            <form onSubmit={handleCreatePost} className="space-y-3">
-              <div className="flex gap-3 items-center">
-                <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold text-white shrink-0">M</div>
-                <input
-                  type="text"
-                  value={newPostContent}
-                  onChange={(e) => setNewPostContent(e.target.value)}
-                  placeholder="Post to your Mzansi wall..."
-                  className="w-full bg-gray-100 px-4 py-2.5 rounded-full text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                />
-              </div>
-              {postImagePreview && (
-                <div className="relative inline-block">
-                  <img
-                    src={postImagePreview}
-                    alt="Selected post preview"
-                    className="max-h-56 rounded-lg object-cover border"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleClearPostImage}
-                    className="absolute top-1.5 right-1.5 bg-black/70 text-white text-xs px-2 py-0.5 rounded-full hover:bg-black"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-              <input
-                ref={postFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={handlePostFileChange}
-                className="hidden"
-              />
-              <div className="flex justify-between items-center pt-2 border-t text-xs md:text-sm">
-                <button
-                  type="button"
-                  onClick={() => postFileInputRef.current?.click()}
-                  className="text-gray-600 hover:bg-gray-100 px-2 md:px-3 py-1.5 rounded-lg"
-                >
-                  {postImageFile ? postImageFile.name : 'Photo/Video'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploadingPostImage}
-                  className="bg-[#007749] text-white px-4 md:px-5 py-1.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-60 transition"
-                >
-                  {uploadingPostImage ? 'Uploading...' : 'Post'}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Feed */}
-          <div className="space-y-3 md:space-y-4">
-            {posts.length === 0 ? (
-              <div className="bg-white/95 backdrop-blur-sm p-6 rounded-xl shadow-sm text-center text-gray-500 text-sm">
-                No wall posts yet. Share an update above!
-              </div>
-            ) : (
-              posts.map((post) => (
-                <div key={post.id} className="bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 md:w-10 md:h-10 bg-[#007749] text-white rounded-full flex items-center justify-center font-bold overflow-hidden shrink-0">
-                        {post.author?.avatarUrl ? (
-                          <img
-                            src={resolveMediaUrl(post.author.avatarUrl)}
-                            alt={post.author?.fullName || 'Mzansi Member'}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          (post.author?.fullName || 'M')[0]
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm">{post.author?.fullName || 'Mzansi Member'}</h4>
-                        <span className="text-[10px] md:text-xs text-gray-400">
-                          {post.createdAt ? new Date(post.createdAt).toLocaleString() : 'Just now'}
-                        </span>
-                      </div>
-                    </div>
-                    {currentUserId && (post.authorId === currentUserId || post.author?.id === currentUserId) && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handleStartEditPost(post)}
-                          className="text-gray-500 hover:text-[#007749] font-medium"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={deletingPostId === post.id}
-                          onClick={() => handleDeletePost(post.id)}
-                          className="text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                        >
-                          {deletingPostId === post.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {editingPostId === post.id ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={editingPostBody}
-                        onChange={(e) => setEditingPostBody(e.target.value)}
-                        rows={3}
-                        className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                      />
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={handleCancelEditPost}
-                          className="text-xs px-3 py-1 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          disabled={savingPostEditId === post.id || !editingPostBody.trim()}
-                          onClick={() => handleSaveEditPost(post.id)}
-                          className="text-xs px-3 py-1 rounded-lg bg-[#007749] text-white font-semibold hover:bg-[#005f3a] disabled:opacity-50"
-                        >
-                          {savingPostEditId === post.id ? 'Saving...' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm">{post.body}</p>
-                  )}
-                  {post.imageUrl && (
-                    <img
-                      src={resolveMediaUrl(post.imageUrl)}
-                      alt={post.body || 'Post image'}
-                      className="w-full max-h-96 object-cover rounded-lg border"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                  )}
-                  <div className="flex justify-between text-gray-500 text-xs md:text-sm pt-2 border-t">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleLike(post.id)}
-                      className={`font-medium flex items-center gap-1 ${
-                        post.likedByMe ? 'text-[#007749] font-bold' : 'hover:text-[#007749]'
-                      }`}
-                    >
-                      <span>{post.likedByMe ? '♥' : '♡'}</span>
-                      <span>Like ({post.likesCount || 0})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleComments(post.id)}
-                      className="hover:text-[#007749] font-medium flex items-center gap-1"
-                    >
-                      <span>💬</span>
-                      <span>Comment ({post.commentsCount || 0})</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSharePost(post)}
-                      className="hover:text-[#007749] font-medium flex items-center gap-1"
-                    >
-                      <span>↗</span>
-                      <span>Share ({post.sharesCount || 0})</span>
-                    </button>
-                  </div>
-
-                  {shareToast && openCommentsPostId !== post.id && (
-                    <p className="text-xs text-[#007749] font-medium">{shareToast}</p>
-                  )}
-
-                  {openCommentsPostId === post.id && (
-                    <div className="pt-2 border-t space-y-2.5">
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                        {(commentsByPost[post.id] || []).length === 0 ? (
-                          <p className="text-xs text-gray-400">No comments yet. Start the conversation.</p>
-                        ) : (
-                          (commentsByPost[post.id] || []).map((c: any) => {
-                            const commentKey = `${post.id}:${c.id}`;
-                            const isCommentOwner =
-                              !!currentUserId &&
-                              (c.authorId === currentUserId || c.author?.id === currentUserId);
-                            return (
-                              <div key={c.id} className="bg-gray-50 rounded-lg px-3 py-2 text-xs space-y-1.5">
-                                {editingCommentKey === commentKey ? (
-                                  <div className="flex gap-1.5 items-center">
-                                    <input
-                                      type="text"
-                                      value={editingCommentBody}
-                                      onChange={(e) => setEditingCommentBody(e.target.value)}
-                                      className="flex-1 border bg-white rounded-md px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-[#007749]"
-                                    />
-                                    <button
-                                      type="button"
-                                      disabled={savingCommentEditKey === commentKey || !editingCommentBody.trim()}
-                                      onClick={() => handleSaveEditComment(post.id, c.id)}
-                                      className="bg-[#007749] text-white px-2.5 py-1 rounded-md font-semibold disabled:opacity-50"
-                                    >
-                                      {savingCommentEditKey === commentKey ? '...' : 'Save'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleCancelEditComment}
-                                      className="bg-gray-200 text-gray-700 px-2 py-1 rounded-md"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div>
-                                      <span className="font-semibold text-gray-800">
-                                        {c.author?.fullName || 'Mzansi Member'}:{' '}
-                                      </span>
-                                      <span className="text-gray-700">{c.body}</span>
-                                    </div>
-                                    {isCommentOwner && (
-                                      <div className="flex items-center gap-2 shrink-0 text-[11px]">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleStartEditComment(post.id, c)}
-                                          className="text-gray-500 hover:text-[#007749] font-medium"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          type="button"
-                                          disabled={deletingCommentKey === commentKey}
-                                          onClick={() => handleDeleteComment(post.id, c.id)}
-                                          className="text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                                        >
-                                          {deletingCommentKey === commentKey ? '...' : 'Delete'}
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                      <form onSubmit={(e) => handleAddComment(e, post.id)} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={commentDrafts[post.id] || ''}
-                          onChange={(e) =>
-                            setCommentDrafts((prev) => ({ ...prev, [post.id]: e.target.value }))
-                          }
-                          placeholder="Write a comment..."
-                          className="flex-1 border rounded-full px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-[#007749]"
-                        />
-                        <button
-                          type="submit"
-                          disabled={submittingCommentId === post.id}
-                          className="bg-[#007749] text-white text-xs font-semibold px-3.5 py-1.5 rounded-full hover:bg-[#005f3a] disabled:opacity-60"
-                        >
-                          {submittingCommentId === post.id ? '...' : 'Reply'}
-                        </button>
-                      </form>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Right Sidebar */}
-        <div className="hidden md:block col-span-1 space-y-3 bg-white/95 backdrop-blur-sm p-4 rounded-xl shadow-sm h-fit">
-          <h2 className="font-semibold text-gray-500 text-xs uppercase tracking-wider mb-2">Contacts</h2>
-          <div className="space-y-2">
-            <a href="/messages" className="flex items-center gap-3 p-1.5 hover:bg-gray-100 rounded-lg cursor-pointer text-xs text-[#007749] font-semibold">
-              <span>💬 Open Mzansi Messenger</span>
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 z-50 flex justify-around py-2 shadow-lg">
-        <a href="/dashboard" className="flex flex-col items-center text-[#007749] text-xs font-semibold">
-          <span className="text-lg">🏠</span> Feed
-        </a>
-        <a href="/messages" className="flex flex-col items-center text-gray-600 text-xs font-medium">
-          <span className="text-lg">💬</span> Chat
-        </a>
-        <button onClick={() => openCreateModal('group')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
-          <span className="text-lg">👥</span> Group
-        </button>
-        <button onClick={() => openCreateModal('page')} className="flex flex-col items-center text-gray-600 text-xs font-medium">
-          <span className="text-lg">📄</span> Page
-        </button>
-        <a href="/profile" className="flex flex-col items-center text-gray-600 text-xs font-medium">
-          <span className="text-lg">👤</span> Profile
-        </a>
-      </div>
-
-      {/* Modal */}
-      {activeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-2xl">
-            <h3 className="text-lg font-bold capitalize">Create New {activeModal}</h3>
-            <form onSubmit={handleModalSubmit} className="space-y-3">
-              <input
-                type="text"
-                required={activeModal !== 'story'}
-                value={titleInput}
-                onChange={(e) => setTitleInput(e.target.value)}
-                placeholder={
-                  activeModal === 'story'
-                    ? 'Image URL (leave blank for default)'
-                    : activeModal === 'group'
-                    ? 'Group Name'
-                    : 'Page Title'
-                }
-                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-              />
-              <textarea
-                value={descInput}
-                onChange={(e) => setDescInput(e.target.value)}
-                placeholder={activeModal === 'story' ? 'Story caption...' : 'Description / Bio...'}
-                rows={3}
-                className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-              />
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm bg-[#007749] text-white font-semibold rounded-lg hover:bg-[#005f3a]"
-                >
-                  Create
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {/* View Group / Page / Story Modal */}
-      {viewingItem && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-          onClick={() => setViewingItem(null)}
-        >
-          <div
-            className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {viewingItem.type === 'story' ? (
-              <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-bold text-gray-900">
-                    {viewingItem.data.authorName || viewingItem.data.user?.displayName || 'Mzansi Story'}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => setViewingItem(null)}
-                    className="text-sm text-gray-500 hover:text-gray-800"
-                  >
-                    Close
-                  </button>
-                </div>
-                {viewingItem.data.mediaUrl && (
-                  <img
-                    src={viewingItem.data.mediaUrl}
-                    alt={viewingItem.data.caption || 'Story'}
-                    className="w-full max-h-80 object-cover rounded-lg"
-                  />
-                )}
-                {viewingItem.data.caption && (
-                  <p className="text-sm text-gray-700">{viewingItem.data.caption}</p>
-                )}
-              </>
-            ) : (
-              <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-1">
-                <div className="border-b pb-3 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#007749]">
-                        {viewingItem.type}
-                      </span>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {viewingItem.data.name || viewingItem.data.title}
-                      </h3>
-                      {viewingItem.data.category && (
-                        <p className="text-xs font-medium text-gray-500">
-                          Category: {viewingItem.data.category}
-                        </p>
-                      )}
-                      {viewingItem.data.privacy && (
-                        <p className="text-xs font-medium text-gray-500 capitalize">
-                          Privacy: {viewingItem.data.privacy}
-                        </p>
-                      )}
-                      <p className="text-sm text-gray-700 mt-1">
-                        {viewingItem.data.description || viewingItem.data.bio || 'No description provided yet.'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {currentUserId &&
-                        ((viewingItem.type === 'group' && viewingItem.data.creatorId === currentUserId) ||
-                          (viewingItem.type === 'page' && viewingItem.data.ownerId === currentUserId)) && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={handleStartEditItem}
-                              className="text-xs font-semibold text-[#007749] hover:underline"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              disabled={deletingItem}
-                              onClick={handleDeleteItem}
-                              className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-50"
-                            >
-                              {deletingItem ? 'Deleting...' : 'Delete'}
-                            </button>
-                          </>
-                        )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingItem(false);
-                          setViewingItem(null);
-                        }}
-                        className="text-sm text-gray-500 hover:text-gray-800"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-
-                  {editingItem && (
-                    <form onSubmit={handleSaveEditItem} className="bg-gray-50 p-3 rounded-xl border space-y-2.5">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                          {viewingItem.type === 'group' ? 'Group Name' : 'Page Title'}
-                        </label>
-                        <input
-                          type="text"
-                          value={editItemTitle}
-                          onChange={(e) => setEditItemTitle(e.target.value)}
-                          required
-                          className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                          {viewingItem.type === 'group' ? 'Description' : 'Bio'}
-                        </label>
-                        <textarea
-                          value={editItemDesc}
-                          onChange={(e) => setEditItemDesc(e.target.value)}
-                          rows={2}
-                          className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                        />
-                      </div>
-                      {viewingItem.type === 'group' && (
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Privacy</label>
-                          <select
-                            value={editItemPrivacy}
-                            onChange={(e) => setEditItemPrivacy(e.target.value)}
-                            className="w-full border bg-white rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                          >
-                            <option value="public">Public</option>
-                            <option value="private">Private</option>
-                          </select>
-                        </div>
-                      )}
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingItem(false)}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={savingItemEdit || !editItemTitle.trim()}
-                          className="text-xs px-3.5 py-1.5 rounded-lg bg-[#007749] text-white font-semibold hover:bg-[#005f3a] disabled:opacity-50"
-                        >
-                          {savingItemEdit ? 'Saving...' : 'Save Changes'}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-
-                <form onSubmit={handleCreateItemPost} className="space-y-2.5 bg-gray-50 p-3 rounded-xl border">
-                  <label className="block text-xs font-semibold text-gray-700">
-                    Create a post in this {viewingItem.type}
-                  </label>
-                  <textarea
-                    value={groupPagePostBody}
-                    onChange={(e) => setGroupPagePostBody(e.target.value)}
-                    rows={2}
-                    placeholder={`Share an update with ${viewingItem.data.name || viewingItem.data.title}...`}
-                    className="w-full border bg-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#007749]"
-                  />
-                  {itemPostImagePreview && (
-                    <div className="relative inline-block">
-                      <img
-                        src={itemPostImagePreview}
-                        alt="Group/Page post preview"
-                        className="max-h-40 rounded-lg object-cover border"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleClearItemPostImage}
-                        className="absolute top-1 right-1 bg-black/70 text-white text-[11px] px-2 py-0.5 rounded-full hover:bg-black"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                  <input
-                    ref={itemPostFileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif,image/webp"
-                    onChange={handleItemPostFileChange}
-                    className="hidden"
-                  />
-                  <div className="flex justify-between items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => itemPostFileInputRef.current?.click()}
-                      className="text-xs text-gray-600 hover:bg-gray-200/70 px-2.5 py-1.5 rounded-lg"
-                    >
-                      {itemPostImageFile ? itemPostImageFile.name : 'Add Photo'}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={postingInItem || (!groupPagePostBody.trim() && !itemPostImageFile)}
-                      className="bg-[#007749] text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-[#005f3a] disabled:opacity-50 transition"
-                    >
-                      {postingInItem ? 'Posting...' : `Post to ${viewingItem.type === 'group' ? 'Group' : 'Page'}`}
-                    </button>
-                  </div>
-                </form>
-
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-                    Posts ({groupPagePosts.length})
-                  </h4>
-                  {groupPagePosts.length === 0 ? (
-                    <p className="text-xs text-gray-400 py-2">No posts here yet. Be the first to post above!</p>
-                  ) : (
-                    groupPagePosts.map((p: any) => (
-                      <div key={p.id} className="border rounded-lg p-3 bg-white space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-gray-800">
-                            {p.author?.fullName || 'Mzansi Member'}
-                          </span>
-                          <span className="text-[11px] text-gray-400">
-                            {p.createdAt ? new Date(p.createdAt).toLocaleString() : 'Just now'}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-700">{p.body}</p>
-                        {p.imageUrl && (
-                          <img
-                            src={resolveMediaUrl(p.imageUrl)}
-                            alt={p.body || 'Group or page post image'}
-                            className="w-full max-h-60 object-cover rounded-lg border mt-1"
-                          />
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+    <CommonUpgrade
+      currentUser={user}
+      posts={posts}
+      spaces={DEFAULT_SPACES}
+      suggestedMembers={suggestions}
+      onCreatePost={handleCreatePost}
+      onToggleLike={handleToggleLike}
+      onToggleSave={handleToggleSave}
+      onAddComment={handleAddComment}
+      onToggleFollow={handleToggleFollow}
+      onClaimReward={handleClaimReward}
+    />
   );
 }
