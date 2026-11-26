@@ -5,8 +5,14 @@ import { CommonUpgrade, type MzansiUser } from "../../components/CommonUpgrade";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+interface ProfileData {
+  id?: string;
+  name?: string;
+  email?: string;
+}
+
 export default function ProfilePage() {
-  const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [user, setUser] = useState<MzansiUser>({
     id: "me",
     name: "Member",
@@ -20,7 +26,7 @@ export default function ProfilePage() {
     const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
     fetch(`${API_URL}/users/me`, { headers })
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
+      .then((data: ProfileData | null) => {
         if (data) {
           setProfile(data);
           const displayName = String(data.name || data.email || "Member");
@@ -49,7 +55,7 @@ export default function ProfilePage() {
         <p className="mz-tiny mz-muted">{user.handle}</p>
         {profile?.email && (
           <p className="mz-post-text" style={{ marginBottom: 0 }}>
-            <strong>Email:</strong> {String(profile.email)}
+            <strong>Email:</strong> {profile.email}
           </p>
         )}
       </div>
