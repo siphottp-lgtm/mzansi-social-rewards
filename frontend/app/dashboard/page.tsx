@@ -44,50 +44,81 @@ export default function DashboardPage() {
       })
       .catch(() => {});
 
-    fetch(`${API_URL}/users`, { headers })
+    const friendNames = new Set<string>();
+    const friendIds = new Set<string>();
+
+    fetch(`${API_URL}/friends`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (Array.isArray(data)) {
-          const mappedMembers: SuggestedMember[] = data
-            .slice(0, 5)
-            .map((u: Record<string, unknown>, idx: number) => {
-              const memberName = String(u.name || u.email || `Member ${idx + 1}`);
-              return {
-                id: String(u.id || idx),
-                name: memberName,
-                role: String(u.role || "Community Member"),
-                initials: memberName.slice(0, 2).toUpperCase(),
-                color: "green",
-                following: false,
-              };
-            });
-          setSuggestions(mappedMembers);
-        }
+        const rawFriends = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.friends)
+          ? data.friends
+          : [];
+        rawFriends.forEach((f: Record<string, unknown>) => {
+          const person = (f.friend || f.user || f) as Record<string, unknown>;
+          if (person?.id) friendIds.add(String(person.id));
+          if (person?.name) friendNames.add(String(person.name).toLowerCase());
+        });
+      })
+      .catch(() => {});
+
+    fetch(`${API_URL}/users/directory`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.users)
+          ? data.users
+          : Array.isArray(data?.members)
+          ? data.members
+          : [];
+        const mappedMembers: SuggestedMember[] = list
+          .slice(0, 5)
+          .map((u: Record<string, unknown>, idx: number) => {
+            const memberName = String(u.name || u.displayName || u.email || `Member ${idx + 1}`);
+            const memberId = String(u.id || idx);
+            return {
+              id: memberId,
+              name: memberName,
+              role: String(u.role || "Community Member"),
+              initials: memberName.slice(0, 2).toUpperCase(),
+              color: "green",
+              following: friendIds.has(memberId) || friendNames.has(memberName.toLowerCase()),
+            };
+          });
+        setSuggestions(mappedMembers);
       })
       .catch(() => {});
 
     fetch(`${API_URL}/posts`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (Array.isArray(data)) {
-          const mapped: MzansiPost[] = data.map((p: Record<string, unknown>, idx: number) => {
-            const authorObj = p.author as { name?: string } | undefined;
-            const authorName = authorObj?.name || String(p.authorName || "Member");
-            return {
-              id: (p.id as string | number) || idx + 1,
-              name: authorName,
-              initials: authorName.slice(0, 2).toUpperCase(),
-              color: "green",
-              time: "Recently",
-              space: String(p.space || "Kasi Builders"),
-              following: true,
-              text: String(p.content || p.text || ""),
-              likes: Number(p.likesCount || 0),
-              comments: 0,
-            };
-          });
-          setPosts(mapped);
-        }
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.posts)
+          ? data.posts
+          : [];
+        const mapped: MzansiPost[] = list.map((p: Record<string, unknown>, idx: number) => {
+          const authorObj = p.author as { id?: string; name?: string } | undefined;
+          const authorName = authorObj?.name || String(p.authorName || "Member");
+          const authorId = authorObj?.id ? String(authorObj.id) : "";
+          const isFriend =
+            (authorId && friendIds.has(authorId)) || friendNames.has(authorName.toLowerCase());
+          return {
+            id: (p.id as string | number) || idx + 1,
+            name: authorName,
+            initials: authorName.slice(0, 2).toUpperCase(),
+            color: "green",
+            time: p.createdAt ? new Date(String(p.createdAt)).toLocaleDateString("en-ZA") : "Recently",
+            space: String(p.space || p.communityName || "Kasi Builders"),
+            following: isFriend,
+            text: String(p.content || p.text || p.body || ""),
+            likes: Number(p.likesCount ?? p.likes ?? 0),
+            comments: Number(p.commentsCount ?? p.comments ?? 0),
+          };
+        });
+        setPosts(mapped);
       })
       .catch(() => {});
   }, []);
@@ -138,8 +169,16 @@ export default function DashboardPage() {
     );
   };
 
-  const handleToggleFollow = (memberId: string) => {
+  const handleToggleFollow = async (memberId: string) => {
     setSuggestions((prev) => prev.map((m) => (m.id === memberId ? { ...m, following: !m.following } : m)));
+    const token = localStorage.getItem("token");
+    if (token) {
+      await fetch(`${API_URL}/friends/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ targetUserId: memberId }),
+      }).catch(() => {});
+    }
   };
 
   const handleClaimReward = async () => {

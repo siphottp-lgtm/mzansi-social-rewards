@@ -1,15 +1,16 @@
 ﻿"use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { CommonUpgrade, type MzansiUser } from "../../components/CommonUpgrade";
+import { friendsApi, users } from "../../lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
-interface MemberItem {
-  id: string;
+interface FriendRelationItem {
+  id: string; // friendship or user id
+  userId: string;
   name: string;
   email?: string;
   handle?: string;
+  status?: string;
 }
 
 function extractList(payload: unknown, keys: string[]): Record<string, unknown>[] {
@@ -29,28 +30,42 @@ function extractList(payload: unknown, keys: string[]): Record<string, unknown>[
   return [];
 }
 
-function mapMember(item: Record<string, unknown>, idx: number): MemberItem {
-  const nested = (item.user || item.friend || item.member) as Record<string, unknown> | undefined;
-  const raw = nested && typeof nested === "object" ? { ...item, ...nested } : item;
+function mapPerson(item: Record<string, unknown>, idx: number): FriendRelationItem {
+  const nested = (item.friend || item.requester || item.addressee || item.user || item.member) as
+    | Record<string, unknown>
+    | undefined;
+  const raw = nested && typeof nested === "object" ? { ...nested, ...item } : item;
+  const personObj = nested && typeof nested === "object" ? nested : raw;
+
   const fullName =
-    raw.displayName ||
-    raw.name ||
-    raw.fullName ||
-    [raw.firstName, raw.lastName].filter(Boolean).join(" ") ||
-    raw.username ||
-    (typeof raw.email === "string" ? raw.email.split("@")[0] : undefined) ||
+    personObj.displayName ||
+    personObj.name ||
+    personObj.fullName ||
+    [personObj.firstName, personObj.lastName].filter(Boolean).join(" ") ||
+    personObj.username ||
+    (typeof personObj.email === "string" ? personObj.email.split("@")[0] : undefined) ||
     `Member ${idx + 1}`;
+
+  const userId = String(personObj.id || raw.targetUserId || raw.userId || raw.id || idx);
+  const relationId = String(item.id || raw.id || userId);
+
   return {
-    id: String(raw.id || raw._id || idx),
+    id: relationId,
+    userId,
     name: String(fullName),
-    email: raw.email ? String(raw.email) : undefined,
-    handle: raw.username ? `@${String(raw.username).replace(/^@/, "")}` : undefined,
+    email: personObj.email ? String(personObj.email) : undefined,
+    handle: personObj.username ? `@${String(personObj.username).replace(/^@/, "")}` : undefined,
+    status: item.status ? String(item.status) : undefined,
   };
 }
 
 export default function FriendsPage() {
-  const [friends, setFriends] = useState<MemberItem[]>([]);
-  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [friends, setFriends] = useState<FriendRelationItem[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRelationItem[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRelationItem[]>([]);
+  const [members, setMembers] = useState<FriendRelationItem[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string>("");
   const [user, setUser] = useState<MzansiUser>({
     id: "me",
     name: "Member",
@@ -59,84 +74,209 @@ export default function FriendsPage() {
     avatarColor: "green",
   });
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-
-    fetch(`${API_URL}/users/me`, { headers })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data === "object") {
-          const obj = data as Record<string, unknown>;
-          const displayName = String(
-            obj.displayName ||
-              obj.name ||
-              obj.fullName ||
-              [obj.firstName, obj.lastName].filter(Boolean).join(" ") ||
-              obj.email ||
-              "Member"
-          );
-          setUser({
-            id: String(obj.id || "me"),
-            name: displayName,
-            handle: `@${displayName.toLowerCase().replace(/\s+/g, "")}`,
-            initials: displayName.slice(0, 2).toUpperCase(),
-            avatarColor: "green",
-          });
-        }
-      })
-      .catch(() => {});
-
-    fetch(`${API_URL}/friends`, { headers })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        const list = extractList(data, ["friends", "items", "users", "members", "data"]).map(mapMember);
-        setFriends(list);
-      })
-      .catch(() => {});
-
-    const candidatePaths = ["/users/directory", "/users", "/api/users", "/members"];
-    (async () => {
-      for (const path of candidatePaths) {
-        try {
-          const res = await fetch(`${API_URL}${path}`, { headers });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const list = extractList(data, ["users", "members", "directory", "items", "friends", "data"]).map(mapMember);
-          if (list.length > 0) {
-            setMembers(list);
-            break;
-          }
-        } catch {
-          // Try next candidate path
-        }
+  const loadData = useCallback(async () => {
+    try {
+      const me = await users.me();
+      if (me && typeof me === "object") {
+        const obj = me as Record<string, unknown>;
+        const displayName = String(
+          obj.displayName ||
+            obj.name ||
+            obj.fullName ||
+            [obj.firstName, obj.lastName].filter(Boolean).join(" ") ||
+            obj.email ||
+            "Member"
+        );
+        setUser({
+          id: String(obj.id || "me"),
+          name: displayName,
+          handle: `@${displayName.toLowerCase().replace(/\s+/g, "")}`,
+          initials: displayName.slice(0, 2).toUpperCase(),
+          avatarColor: "green",
+        });
       }
-    })();
+    } catch {
+      // Keep default user state if unauthenticated
+    }
+
+    try {
+      const overview = await friendsApi.overview();
+      const obj = (overview && typeof overview === "object" ? overview : {}) as Record<string, unknown>;
+      const accepted = extractList(overview, ["friends", "accepted"]).map(mapPerson);
+      const incoming = extractList(obj.incoming ?? obj.pendingIncoming ?? obj.requests, [
+        "incoming",
+        "pendingIncoming",
+        "requests",
+      ]).map(mapPerson);
+      const outgoing = extractList(obj.outgoing ?? obj.pendingOutgoing ?? obj.sent, [
+        "outgoing",
+        "pendingOutgoing",
+        "sent",
+      ]).map(mapPerson);
+
+      setFriends(accepted);
+      setIncomingRequests(incoming);
+      setOutgoingRequests(outgoing);
+    } catch {
+      // Ignore if friends overview isn't available yet
+    }
+
+    try {
+      const dirData = await users.directory();
+      const list = extractList(dirData, ["users", "members", "directory", "items", "data"]).map(mapPerson);
+      setMembers(list);
+    } catch {
+      // Ignore if directory isn't available yet
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleAddFriend = async (targetUserId: string, targetName: string) => {
+    setBusyId(targetUserId);
+    setFeedback("");
+    try {
+      await friendsApi.sendRequest(targetUserId);
+      setFeedback(`Friend request sent to ${targetName}.`);
+      await loadData();
+    } catch (err: unknown) {
+      setFeedback(err instanceof Error ? err.message : "Could not send friend request.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAccept = async (requestId: string, name: string) => {
+    setBusyId(requestId);
+    setFeedback("");
+    try {
+      await friendsApi.accept(requestId);
+      setFeedback(`Accepted friend request from ${name}.`);
+      await loadData();
+    } catch (err: unknown) {
+      setFeedback(err instanceof Error ? err.message : "Could not accept request.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDecline = async (requestId: string, name: string) => {
+    setBusyId(requestId);
+    setFeedback("");
+    try {
+      await friendsApi.decline(requestId);
+      setFeedback(`Declined friend request from ${name}.`);
+      await loadData();
+    } catch (err: unknown) {
+      setFeedback(err instanceof Error ? err.message : "Could not decline request.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRemoveFriend = async (friendshipId: string, name: string) => {
+    setBusyId(friendshipId);
+    setFeedback("");
+    try {
+      await friendsApi.remove(friendshipId);
+      setFeedback(`Removed ${name} from friends.`);
+      await loadData();
+    } catch (err: unknown) {
+      setFeedback(err instanceof Error ? err.message : "Could not remove friend.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const friendUserIds = new Set(friends.map((f) => f.userId));
+  const outgoingUserIds = new Set(outgoingRequests.map((r) => r.userId));
 
   return (
     <CommonUpgrade
       currentUser={user}
       showFeed={false}
       pageTitle="Friends & Registered Members"
-      pageSubtitle="Your connected friends and registered Mzansi members."
+      pageSubtitle="Send friend requests, manage connections, and browse Mzansi members."
     >
+      {feedback && (
+        <div className="mz-post" style={{ color: "var(--green)", fontWeight: 600, fontSize: 12 }}>
+          {feedback}
+        </div>
+      )}
+
+      {incomingRequests.length > 0 && (
+        <div className="mz-post">
+          <div className="mz-label" style={{ color: "var(--orange)" }}>
+            FRIEND REQUESTS ({incomingRequests.length})
+          </div>
+          {incomingRequests.map((req) => (
+            <div
+              key={req.id}
+              className="mz-post-head"
+              style={{ marginTop: 14, justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}
+            >
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <div className="mz-avatar green">{req.name.slice(0, 2).toUpperCase()}</div>
+                <div>
+                  <strong style={{ fontSize: 13 }}>{req.name}</strong>
+                  <div className="mz-tiny mz-muted">{req.handle || req.email || "Wants to connect"}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className="mz-primary"
+                  disabled={busyId === req.id}
+                  onClick={() => handleAccept(req.id, req.name)}
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  className="mz-follow"
+                  disabled={busyId === req.id}
+                  onClick={() => handleDecline(req.id, req.name)}
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mz-post">
         <div className="mz-label" style={{ color: "var(--green)" }}>
           YOUR FRIENDS ({friends.length})
         </div>
         {friends.length === 0 ? (
           <p className="mz-tiny mz-muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            No connected friends returned yet.
+            No connected friends yet. Send a friend request to a member below.
           </p>
         ) : (
           friends.map((f) => (
-            <div key={f.id} className="mz-post-head" style={{ marginTop: 14 }}>
-              <div className="mz-avatar green">{f.name.slice(0, 2).toUpperCase()}</div>
-              <div>
-                <strong style={{ fontSize: 13 }}>{f.name}</strong>
-                <div className="mz-tiny mz-muted">{f.handle || f.email || "Connected friend"}</div>
+            <div
+              key={f.id}
+              className="mz-post-head"
+              style={{ marginTop: 14, justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}
+            >
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <div className="mz-avatar green">{f.name.slice(0, 2).toUpperCase()}</div>
+                <div>
+                  <strong style={{ fontSize: 13 }}>{f.name}</strong>
+                  <div className="mz-tiny mz-muted">{f.handle || f.email || "Connected friend"}</div>
+                </div>
               </div>
+              <button
+                type="button"
+                className="mz-follow"
+                disabled={busyId === f.id}
+                onClick={() => handleRemoveFriend(f.id, f.name)}
+              >
+                Remove
+              </button>
             </div>
           ))
         )}
@@ -151,15 +291,38 @@ export default function FriendsPage() {
             No registered members returned from /users/directory yet.
           </p>
         ) : (
-          members.map((m) => (
-            <div key={m.id} className="mz-post-head" style={{ marginTop: 14 }}>
-              <div className="mz-avatar small green">{m.name.slice(0, 2).toUpperCase()}</div>
-              <div>
-                <strong style={{ fontSize: 13 }}>{m.name}</strong>
-                <div className="mz-tiny mz-muted">{m.handle || m.email || "Registered member"}</div>
+          members.map((m) => {
+            const isFriend = friendUserIds.has(m.userId);
+            const isPending = outgoingUserIds.has(m.userId);
+            const isSelf = m.userId === user.id;
+
+            return (
+              <div
+                key={m.id}
+                className="mz-post-head"
+                style={{ marginTop: 14, justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}
+              >
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <div className="mz-avatar small green">{m.name.slice(0, 2).toUpperCase()}</div>
+                  <div>
+                    <strong style={{ fontSize: 13 }}>{m.name}</strong>
+                    <div className="mz-tiny mz-muted">{m.handle || m.email || "Registered member"}</div>
+                  </div>
+                </div>
+
+                {!isSelf && (
+                  <button
+                    type="button"
+                    className={isFriend || isPending ? "mz-follow followed" : "mz-primary"}
+                    disabled={isFriend || isPending || busyId === m.userId}
+                    onClick={() => handleAddFriend(m.userId, m.name)}
+                  >
+                    {isFriend ? "Friends" : isPending ? "Request Sent" : "Add Friend"}
+                  </button>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </CommonUpgrade>

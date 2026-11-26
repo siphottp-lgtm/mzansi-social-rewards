@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+﻿const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export function getToken() {
   if (typeof window === 'undefined') return null;
@@ -11,7 +11,6 @@ export async function api(path: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string>),
   };
 
-  // Only set JSON content-type when we are not sending FormData
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
@@ -30,7 +29,6 @@ export async function api(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
-/** Upload an image to /uploads/:category and return the public URL */
 export async function uploadImage(category: 'avatars' | 'communities' | 'posts' | 'events', file: File) {
   const form = new FormData();
   form.append('file', file);
@@ -48,6 +46,16 @@ export const auth = {
 export const users = {
   me: () => api('/users/me'),
   update: (data: any) => api('/users/me', { method: 'PATCH', body: JSON.stringify(data) }),
+  directory: () => api('/users/directory'),
+};
+
+export const friendsApi = {
+  overview: () => api('/friends'),
+  sendRequest: (targetUserId: string) =>
+    api('/friends/request', { method: 'POST', body: JSON.stringify({ targetUserId }) }),
+  accept: (id: string) => api(`/friends/${id}/accept`, { method: 'POST' }),
+  decline: (id: string) => api(`/friends/${id}/decline`, { method: 'POST' }),
+  remove: (id: string) => api(`/friends/${id}`, { method: 'DELETE' }),
 };
 
 export const communities = {
@@ -58,7 +66,8 @@ export const communities = {
 };
 
 export const posts = {
-  list: (communityId: string) => api(`/posts?communityId=${communityId}`),
+  list: (communityId?: string) =>
+    api(communityId ? `/posts?communityId=${encodeURIComponent(communityId)}` : '/posts'),
   create: (data: any) => api('/posts', { method: 'POST', body: JSON.stringify(data) }),
 };
 
