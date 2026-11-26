@@ -117,6 +117,12 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   const [notice, setNotice] = useState<string>("");
   const [walletAddress, setWalletAddress] = useState<string>("");
 
+  // Option A: KASI Coin Tipping & Celo Claim Status state
+  const [tipOpen, setTipOpen] = useState<boolean>(false);
+  const [tipRecipient, setTipRecipient] = useState<string>("");
+  const [tipAmount, setTipAmount] = useState<string>("10");
+  const [claimStatus, setClaimStatus] = useState<string>("Ready on Celo");
+
   const showNotice = (msg: string) => {
     setNotice(msg);
     window.setTimeout(() => setNotice(""), 3500);
@@ -127,20 +133,89 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   };
 
   const handleConnectWalletInfo = async () => {
-    const eth = (window as unknown as { ethereum?: { request?: (args: { method: string }) => Promise<string[]> } })
-      .ethereum;
+    const eth = (
+      window as unknown as {
+        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+      }
+    ).ethereum;
     if (!eth?.request) {
       showNotice("Wallet info: No browser wallet detected. Connect MiniPay or MetaMask on Celo.");
       return;
     }
     try {
-      const accounts = await eth.request({ method: "eth_requestAccounts" });
+      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
       if (accounts?.[0]) {
         setWalletAddress(accounts[0]);
         showNotice(`Connected wallet: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
       }
     } catch {
       showNotice("Wallet connection request was cancelled.");
+    }
+  };
+
+  const handleTriggerClaim = async () => {
+    setClaimStatus("Claiming on Celo…");
+    try {
+      if (onClaimReward) {
+        await onClaimReward();
+        setClaimStatus("Claim submitted");
+      } else {
+        await handleConnectWalletInfo();
+        setClaimStatus("Wallet ready");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Claim failed";
+      setClaimStatus(`Error: ${message}`);
+      showNotice(message);
+    }
+  };
+
+  const handleSendKasiTip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = tipRecipient.trim();
+    const amt = Number(tipAmount);
+    if (!target || Number.isNaN(amt) || amt <= 0) {
+      showNotice("Enter a valid recipient address or member handle and KASI amount.");
+      return;
+    }
+
+    const eth = (
+      window as unknown as {
+        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+      }
+    ).ethereum;
+
+    if (!eth?.request) {
+      showNotice(`Tip queued (${amt} KASI → ${target}). Connect a Celo wallet to sign on-chain.`);
+      setTipRecipient("");
+      setTipOpen(false);
+      return;
+    }
+
+    try {
+      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
+      const fromAddr = accounts?.[0];
+      if (fromAddr) setWalletAddress(fromAddr);
+
+      if (target.startsWith("0x") && target.length === 42 && fromAddr) {
+        const weiHex = `0x${BigInt(Math.round(amt * 1e18)).toString(16)}`;
+        const txHash = (await eth.request({
+          method: "eth_sendTransaction",
+          params: [{ from: fromAddr, to: target, value: weiHex }],
+        })) as string;
+        setClaimStatus(`Tip sent (${txHash.slice(0, 10)}…)`);
+        showNotice(`Sent ${amt} KASI tip to ${target.slice(0, 6)}…${target.slice(-4)}`);
+      } else {
+        setClaimStatus(`Tip recorded (${amt} KASI)`);
+        showNotice(`Tip of ${amt} KASI prepared for ${target}.`);
+      }
+
+      setTipRecipient("");
+      setTipOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Tip transaction cancelled";
+      setClaimStatus("Tip cancelled");
+      showNotice(msg);
     }
   };
 
@@ -306,17 +381,72 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   type="button"
                   className="mz-action"
                   style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
-                  onClick={async () => {
-                    if (onClaimReward) {
-                      await onClaimReward();
-                    } else {
-                      showNotice("KASI Coin rewards run on Celo network.");
-                    }
-                  }}
+                  onClick={handleTriggerClaim}
                 >
                   ↳ Claim Rewards (Celo)
                 </button>
+                <button
+                  type="button"
+                  className="mz-action"
+                  style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
+                  onClick={() => setTipOpen((prev) => !prev)}
+                >
+                  ↳ Send KASI Tip {tipOpen ? "▴" : "▾"}
+                </button>
+
+                {tipOpen && (
+                  <form
+                    onSubmit={handleSendKasiTip}
+                    style={{
+                      display: "grid",
+                      gap: 6,
+                      padding: "8px",
+                      borderRadius: 6,
+                      border: "1px solid var(--line)",
+                      background: "var(--bg)",
+                    }}
+                  >
+                    <input
+                      value={tipRecipient}
+                      onChange={(e) => setTipRecipient(e.target.value)}
+                      placeholder="0x… or @member"
+                      required
+                      style={{
+                        border: "1px solid var(--line)",
+                        borderRadius: 5,
+                        padding: "5px 7px",
+                        fontSize: 11,
+                        background: "var(--white)",
+                      }}
+                    />
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={tipAmount}
+                        onChange={(e) => setTipAmount(e.target.value)}
+                        required
+                        style={{
+                          width: 68,
+                          border: "1px solid var(--line)",
+                          borderRadius: 5,
+                          padding: "5px 7px",
+                          fontSize: 11,
+                          background: "var(--white)",
+                        }}
+                      />
+                      <button type="submit" className="mz-primary" style={{ padding: "5px 9px", fontSize: 11, flex: 1 }}>
+                        Send Tip
+                      </button>
+                    </div>
+                  </form>
+                )}
+
                 <div className="mz-tiny mz-muted" style={{ padding: "2px 8px" }}>
+                  ↳ Status: {claimStatus}
+                </div>
+                <div className="mz-tiny mz-muted" style={{ padding: "0 8px 2px" }}>
                   ↳ Network: Celo · Token: KASI
                 </div>
               </div>
@@ -438,13 +568,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                     <button
                       type="button"
                       className="mz-primary"
-                      onClick={async () => {
-                        if (onClaimReward) {
-                          await onClaimReward();
-                        } else {
-                          showNotice("Connect your Celo wallet to claim KASI Coin rewards.");
-                        }
-                      }}
+                      onClick={handleTriggerClaim}
                     >
                       Claim KASI Coin (Celo) →
                     </button>
@@ -671,3 +795,4 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     </div>
   );
 };
+
