@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { MzansiBrandMark } from "../components/CommonUpgrade";
 import "../styles/common-upgrade.css";
 
 export default function HomePage() {
@@ -9,15 +10,13 @@ export default function HomePage() {
     <div className="mz-common-app" style={{ gridTemplateColumns: "1fr" }}>
       <div className="mz-content" style={{ maxWidth: 1080, width: "100%", margin: "0 auto" }}>
         <header className="mz-topbar">
-          <Link href="/" className="mz-brand">
-            <span className="mz-brand-mark">✳</span>mzansi
-          </Link>
+          <MzansiBrandMark />
           <div className="mz-top-actions">
             <Link href="/login" className="mz-action" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>
               Log in
             </Link>
             <Link href="/register" className="mz-primary">
-              Join Mzansi →
+              Join 🇿🇦 mzansi →
             </Link>
           </div>
         </header>
@@ -25,7 +24,7 @@ export default function HomePage() {
         <main style={{ padding: "48px 28px 64px" }}>
           <section className="mz-banner" style={{ padding: "36px 32px", marginBottom: 32 }}>
             <div className="mz-label" style={{ color: "var(--green)" }}>
-              KASIC Ecosystem · Celo Community Rewards
+              KASI Coin · Celo Community Rewards
             </div>
             <h1
               style={{
@@ -66,18 +65,18 @@ export default function HomePage() {
 
           <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}>
             <div className="mz-post" style={{ marginBottom: 0 }}>
-              <div className="mz-label" style={{ color: "var(--orange)" }}>01 · LOCAL CIRCLES</div>
-              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Your little corners</h2>
+              <div className="mz-label" style={{ color: "var(--orange)" }}>01 · WORKSPACE TREE</div>
+              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Organized navigation</h2>
               <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
-                Focused spaces for builders, local merchants, and everyday voices across Mzansi.
+                Feed, Friends & Members, Messages, Saved, and Profile grouped cleanly in collapsible trees.
               </p>
             </div>
 
             <div className="mz-post" style={{ marginBottom: 0 }}>
-              <div className="mz-label" style={{ color: "var(--green)" }}>02 · KASI COIN</div>
-              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Rewards that stay local</h2>
+              <div className="mz-label" style={{ color: "var(--green)" }}>02 · KASI COIN TREE</div>
+              <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Wallet & rewards</h2>
               <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
-                Earn KASI Coin and claim Celo rewards as you contribute to your community.
+                Access your Celo wallet connection, KASI Coin reward claims, and network details from one tree.
               </p>
             </div>
 
@@ -85,7 +84,7 @@ export default function HomePage() {
               <div className="mz-label" style={{ color: "var(--ink)" }}>03 · DIRECT CONNECTION</div>
               <h2 style={{ fontFamily: "var(--display)", fontSize: 18, margin: "8px 0" }}>Friends & messages</h2>
               <p className="mz-tiny mz-muted" style={{ lineHeight: 1.65, margin: 0 }}>
-                Keep up with friends, messages, and your profile in one calm workspace.
+                Keep up with friends, messages, and your profile in the same calm Common workspace.
               </p>
             </div>
           </section>
