@@ -173,3 +173,98 @@
     font-size: 12.5px;
   }
 }
+
+/* === South African Flag Theme, Transparent Text Boxes & Streaming Bottom Banner === */
+:root {
+  --sa-green: #007749;
+  --sa-gold: #ffb81c;
+  --sa-red: #de3831;
+  --sa-blue: #002395;
+  --sa-black: #0b0f14;
+  --green: #007749;
+  --orange: #ffb81c;
+}
+
+.mz-flag-strip {
+  height: 4px;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    #000000 0% 16%,
+    #ffb81c 16% 32%,
+    #007749 32% 68%,
+    #de3831 68% 84%,
+    #002395 84% 100%
+  );
+}
+
+/* Transparent frosted cards & text boxes so image1 background remains visible */
+.mz-common-app input,
+.mz-common-app textarea,
+.mz-common-app select,
+.mz-transparent-input {
+  background: rgba(255, 255, 255, 0.28) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 119, 73, 0.35) !important;
+  color: #0b0f14 !important;
+}
+
+.mz-common-app input::placeholder,
+.mz-common-app textarea::placeholder,
+.mz-transparent-input::placeholder {
+  color: rgba(11, 15, 20, 0.68) !important;
+}
+
+.mz-banner,
+.mz-composer,
+.mz-post,
+.mz-glass-card {
+  background: rgba(255, 255, 255, 0.62) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 119, 73, 0.25) !important;
+}
+
+.mz-primary {
+  background: linear-gradient(135deg, #007749 0%, #005c38 100%) !important;
+  border: 1px solid #ffb81c !important;
+  color: #ffffff !important;
+}
+
+/* Bottom Streaming Banner: Freedom Chatter • People Shall Govern */
+.mz-flag-marquee {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  background: linear-gradient(90deg, #000000 0%, #007749 35%, #002395 70%, #de3831 100%);
+  border-top: 2px solid #ffb81c;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mz-flag-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 36px;
+  padding-left: 100%;
+  animation: mzStreamBanner 22s linear infinite;
+}
+
+@keyframes mzStreamBanner {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}

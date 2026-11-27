@@ -1,82 +1,151 @@
-﻿'use client';
+﻿"use client";
 
-import { useState } from 'react';
-import { auth } from '@/lib/api';
-import { MzansiBrandMark, SwipeUpTaskbar, WatermarkBackdrop } from '../../components/CommonUpgrade';
+import React, { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { MzansiBrandMark, WatermarkBackdrop } from "../../components/CommonUpgrade";
+import { auth } from "../../lib/api";
+import "../../styles/common-upgrade.css";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const res = await auth.login({ email, password });
-      localStorage.setItem('token', res.accessToken);
-      localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.assign('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+      const res = await auth.login({ email: email.trim(), password });
+      const token =
+        res?.access_token || res?.accessToken || res?.token || res?.data?.access_token || res?.data?.token;
+      if (token && typeof window !== "undefined") {
+        window.localStorage.setItem("token", String(token));
+      }
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Invalid email or password.");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh", paddingBottom: 68 }}>
-      <WatermarkBackdrop imageKey="image3" />
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ padding: "16px 24px" }}>
-          <MzansiBrandMark compact />
-        </div>
-        <div className="max-w-md mx-auto px-4 py-8">
-          <h1 className="text-2xl font-bold mb-6">Sign in to Mzansi</h1>
-          <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border">
-            {error && <p className="text-red-600 text-sm break-words">{error}</p>}
+    <div
+      className="mz-common-app"
+      style={{
+        gridTemplateColumns: "1fr",
+        position: "relative",
+        minHeight: "100vh",
+        paddingBottom: 56,
+        background: "transparent",
+      }}
+    >
+      <WatermarkBackdrop imageKey="image1" />
+      <div style={{ maxWidth: 960, width: "100%", margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div className="mz-flag-strip" />
+        <header className="mz-topbar" style={{ background: "rgba(255, 255, 255, 0.65)", backdropFilter: "blur(8px)" }}>
+          <MzansiBrandMark />
+          <div className="mz-top-actions">
+            <Link href="/" className="mz-action" style={{ fontSize: 12, fontWeight: 600 }}>
+              Home
+            </Link>
+            <Link href="/register" className="mz-primary">
+              Register
+            </Link>
+          </div>
+        </header>
+
+        <main style={{ padding: "48px 20px", display: "grid", placeItems: "center" }}>
+          <form
+            onSubmit={handleSubmit}
+            className="mz-glass-card"
+            style={{
+              width: "100%",
+              maxWidth: 400,
+              borderRadius: 16,
+              padding: 24,
+              display: "grid",
+              gap: 14,
+            }}
+          >
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+              <div className="mz-label" style={{ color: "#007749" }}>
+                🇿🇦 MZANSI SIGN IN
+              </div>
+              <h1 style={{ margin: "4px 0 0", fontSize: 20, fontWeight: 800 }}>Log in</h1>
+            </div>
+
+            {error && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#991b1b",
+                  background: "rgba(254, 226, 226, 0.78)",
+                  border: "1px solid #de3831",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                }}
+              >
+                {error}
+              </div>
+            )}
+
+            <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 600 }}>
+              <span>Email</span>
               <input
                 type="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-                required
+                placeholder="you@example.com"
+                className="mz-transparent-input"
+                style={{ borderRadius: 8, padding: "9px 11px", fontSize: 13 }}
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Password</label>
+            </label>
+
+            <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 600 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Password</span>
+                <Link href="/forgot-password" style={{ color: "#007749", fontSize: 11, fontWeight: 700 }}>
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2"
-                required
+                placeholder="••••••••"
+                className="mz-transparent-input"
+                style={{ borderRadius: 8, padding: "9px 11px", fontSize: 13 }}
               />
-              <div className="mt-1 text-right">
-                <a href="/forgot-password" className="text-xs text-[#007749] font-semibold hover:underline">
-                  Forgot password?
-                </a>
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#007749] text-white py-2.5 rounded-lg font-semibold hover:bg-[#005f3a] disabled:opacity-50"
-            >
-              {loading ? 'Signing in...' : 'Sign in'}
+            </label>
+
+            <button type="submit" className="mz-primary" disabled={loading} style={{ padding: "10px 14px" }}>
+              {loading ? "Signing in..." : "Log in →"}
             </button>
+
+            <div style={{ fontSize: 12, textAlign: "center" }}>
+              No account?{" "}
+              <Link href="/register" style={{ color: "#007749", fontWeight: 700 }}>
+                Join Mzansi
+              </Link>
+            </div>
           </form>
-          <p className="mt-4 text-sm text-center text-gray-600">
-            No account? <a href="/register" className="text-[#007749] font-semibold">Register</a>
-          </p>
+        </main>
+      </div>
+
+      <div className="mz-flag-marquee">
+        <div className="mz-flag-marquee-track">
+          <span>🇿🇦 Freedom Chatter • People Shall Govern</span>
+          <span>★ Together We Can Do It • Mzansi Community Network</span>
+          <span>🇿🇦 Freedom Chatter • People Shall Govern</span>
         </div>
       </div>
-      <SwipeUpTaskbar />
     </div>
   );
 }
-
