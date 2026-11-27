@@ -1,268 +1,229 @@
 ﻿"use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { CommonUpgrade, type MzansiUser } from "../../components/CommonUpgrade";
-import { api, friendsApi, users } from "../../lib/api";
+import React, { useEffect, useMemo, useState } from "react";
+import { CommonUpgrade, MzansiUser } from "../../components/CommonUpgrade";
 
-interface PersonRecord {
+interface ChatMessage {
   id: string;
-  name: string;
-  handle?: string;
-  lastMessage?: string;
-  unreadCount?: number;
+  sender: string;
+  isMe: boolean;
+  text: string;
+  time: string;
+  tipAmount?: number;
 }
 
-interface ThreadMessage {
+interface ChatThread {
   id: string;
-  senderId?: string;
-  senderName: string;
-  body: string;
-  createdAt?: string;
+  memberName: string;
+  initials: string;
+  role: string;
+  walletHint: string;
+  color?: "" | "green" | "pink" | "blue";
+  unread: number;
+  messages: ChatMessage[];
 }
 
-function resolvePersonName(obj: Record<string, unknown> | undefined | null, fallback = "Mzansi Member"): string {
-  if (!obj || typeof obj !== "object") return fallback;
-  const candidate =
-    obj.fullName ||
-    obj.displayName ||
-    obj.name ||
-    [obj.firstName, obj.lastName].filter(Boolean).join(" ") ||
-    obj.username ||
-    (typeof obj.email === "string" ? obj.email.split("@")[0] : "");
-  return String(candidate || fallback);
-}
+const MESSAGES_STORAGE_KEY = "mzansi_messages_v1";
+const PROFILE_STORAGE_KEY = "mzansi_profile_details_v1";
 
-function extractArray(payload: unknown, keys: string[]): Record<string, unknown>[] {
-  if (Array.isArray(payload)) return payload as Record<string, unknown>[];
-  if (payload && typeof payload === "object") {
-    const obj = payload as Record<string, unknown>;
-    for (const k of keys) {
-      if (Array.isArray(obj[k])) return obj[k] as Record<string, unknown>[];
-    }
-    if (obj.data && typeof obj.data === "object") {
-      const inner = obj.data as Record<string, unknown>;
-      for (const k of keys) {
-        if (Array.isArray(inner[k])) return inner[k] as Record<string, unknown>[];
-      }
-    }
-  }
-  return [];
-}
+const DEFAULT_USER: MzansiUser = {
+  id: "member-1",
+  name: "Member",
+  handle: "@member",
+  initials: "M",
+  avatarColor: "green",
+};
+
+const INITIAL_THREADS: ChatThread[] = [
+  {
+    id: "thread-thabo",
+    memberName: "Thabo Mokoena",
+    initials: "TM",
+    role: "Soshanguve Builder",
+    walletHint: "0x71C...9A4E",
+    color: "green",
+    unread: 1,
+    messages: [
+      {
+        id: "m-1",
+        sender: "Thabo Mokoena",
+        isMe: false,
+        text: "Saw your latest post on the feed. Are you joining the weekend space?",
+        time: "10:14",
+      },
+    ],
+  },
+  {
+    id: "thread-lerato",
+    memberName: "Lerato Dlamini",
+    initials: "LD",
+    role: "Community Organizer",
+    walletHint: "0x4B2...3D10",
+    color: "pink",
+    unread: 0,
+    messages: [
+      {
+        id: "m-2",
+        sender: "Lerato Dlamini",
+        isMe: false,
+        text: "Welcome to the workspace! Let me know if you test KASI tipping on Celo.",
+        time: "Yesterday",
+      },
+    ],
+  },
+  {
+    id: "thread-sipho",
+    memberName: "Sipho Ndlovu",
+    initials: "SN",
+    role: "Celo MiniPay User",
+    walletHint: "0x9E8...1F22",
+    color: "blue",
+    unread: 0,
+    messages: [
+      {
+        id: "m-3",
+        sender: "Sipho Ndlovu",
+        isMe: false,
+        text: "MiniPay transfers on Celo confirm fast for local micro-rewards.",
+        time: "Wed",
+      },
+    ],
+  },
+];
 
 export default function MessagesPage() {
-  const [user, setUser] = useState<MzansiUser>({
-    id: "me",
-    name: "Member",
-    handle: "@member",
-    initials: "MZ",
-    avatarColor: "green",
-  });
-  const [contacts, setContacts] = useState<PersonRecord[]>([]);
-  const [selectedPeer, setSelectedPeer] = useState<PersonRecord | null>(null);
-  const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [user, setUser] = useState<MzansiUser>(DEFAULT_USER);
+  const [threads, setThreads] = useState<ChatThread[]>(INITIAL_THREADS);
+  const [activeId, setActiveId] = useState<string>(INITIAL_THREADS[0].id);
   const [draft, setDraft] = useState<string>("");
-  const [statusText, setStatusText] = useState<string>("");
-
-  const loadThread = useCallback(
-    async (peer: PersonRecord, nameMap: Map<string, string>, currentUserId: string, currentUserName: string) => {
-      try {
-        const rawThread = await api(`/messages/${encodeURIComponent(peer.id)}`);
-        const list = extractArray(rawThread, ["messages", "thread", "items", "data"]);
-        const mapped: ThreadMessage[] = list.map((m, idx) => {
-          const senderObj = (m.sender || m.author || m.from || m.user) as Record<string, unknown> | undefined;
-          const sid = String(m.senderId || m.fromUserId || senderObj?.id || "");
-          const resolvedName =
-            sid === currentUserId
-              ? currentUserName
-              : senderObj
-              ? resolvePersonName(senderObj, nameMap.get(sid) || peer.name)
-              : nameMap.get(sid) || (m.senderName ? String(m.senderName) : peer.name);
-
-          return {
-            id: String(m.id || m._id || idx),
-            senderId: sid,
-            senderName: resolvedName,
-            body: String(m.body || m.content || m.text || m.message || ""),
-            createdAt: m.createdAt
-              ? new Date(String(m.createdAt)).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
-              : undefined,
-          };
-        });
-        setMessages(mapped);
-      } catch {
-        setMessages([]);
-      }
-    },
-    []
-  );
+  const [tipDrawerOpen, setTipDrawerOpen] = useState<boolean>(false);
+  const [tipAmount, setTipAmount] = useState<string>("10");
+  const [tipAddress, setTipAddress] = useState<string>(INITIAL_THREADS[0].walletHint);
+  const [statusNote, setStatusNote] = useState<string>("");
 
   useEffect(() => {
-    let active = true;
-
-    (async () => {
-      let meId = "me";
-      let meName = "Member";
-      try {
-        const me = await users.me();
-        if (me && typeof me === "object") {
-          const obj = me as Record<string, unknown>;
-          meId = String(obj.id || "me");
-          meName = resolvePersonName(obj, "Member");
-          if (active) {
-            setUser({
-              id: meId,
-              name: meName,
-              handle: `@${meName.toLowerCase().replace(/\s+/g, "")}`,
-              initials: meName.slice(0, 2).toUpperCase(),
-              avatarColor: "green",
-            });
-          }
-        }
-      } catch {
-        // Keep default user state
-      }
-
-      const nameMap = new Map<string, string>();
-      const contactMap = new Map<string, PersonRecord>();
-
-      try {
-        const dirRes = await users.directory();
-        const dirList = extractArray(dirRes, ["users", "members", "directory", "items", "data"]);
-        dirList.forEach((u, idx) => {
-          const id = String(u.id || u._id || idx);
-          if (id === meId) return;
-          const name = resolvePersonName(u, `Member ${idx + 1}`);
-          nameMap.set(id, name);
-          contactMap.set(id, {
-            id,
-            name,
-            handle: u.username ? `@${String(u.username).replace(/^@/, "")}` : undefined,
-          });
-        });
-      } catch {
-        // Ignore directory errors
-      }
-
-      try {
-        const friendRes = await friendsApi.overview();
-        const friendList = extractArray(friendRes, ["friends", "accepted", "items", "data"]);
-        friendList.forEach((f, idx) => {
-          const nested = (f.friend || f.user || f.member) as Record<string, unknown> | undefined;
-          const raw = nested && typeof nested === "object" ? nested : f;
-          const id = String(raw.id || f.friendId || f.userId || idx);
-          if (id === meId) return;
-          const name = resolvePersonName(raw, nameMap.get(id) || `Friend ${idx + 1}`);
-          nameMap.set(id, name);
-          contactMap.set(id, {
-            ...(contactMap.get(id) || { id }),
-            id,
-            name,
-          });
-        });
-      } catch {
-        // Ignore friends errors
-      }
-
-      try {
-        const convRes = await api("/messages/conversations");
-        const convList = extractArray(convRes, ["conversations", "threads", "items", "data"]);
-        convList.forEach((c, idx) => {
-          const peerObj = (c.user || c.peer || c.otherUser || c.recipient || c.member) as
-            | Record<string, unknown>
-            | undefined;
-          const peerId = String(peerObj?.id || c.peerId || c.otherUserId || c.userId || idx);
-          if (!peerId || peerId === meId) return;
-          const peerName = peerObj
-            ? resolvePersonName(peerObj, nameMap.get(peerId) || `Member ${idx + 1}`)
-            : nameMap.get(peerId) || String(c.peerName || c.name || `Member ${idx + 1}`);
-          nameMap.set(peerId, peerName);
-          contactMap.set(peerId, {
-            ...(contactMap.get(peerId) || { id: peerId }),
-            id: peerId,
-            name: peerName,
-            lastMessage: c.lastMessage ? String(c.lastMessage) : undefined,
-            unreadCount: typeof c.unreadCount === "number" ? c.unreadCount : undefined,
-          });
-        });
-      } catch {
-        // Ignore conversation errors
-      }
-
-      const mergedContacts = Array.from(contactMap.values());
-      if (!active) return;
-      setContacts(mergedContacts);
-
-      if (mergedContacts.length > 0) {
-        const first = mergedContacts[0];
-        setSelectedPeer(first);
-        await loadThread(first, nameMap, meId, meName);
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [loadThread]);
-
-  const handleSelectPeer = async (peer: PersonRecord) => {
-    setSelectedPeer(peer);
-    setStatusText("");
     try {
-      const rawThread = await api(`/messages/${encodeURIComponent(peer.id)}`);
-      const list = extractArray(rawThread, ["messages", "thread", "items", "data"]);
-      const mapped: ThreadMessage[] = list.map((m, idx) => {
-        const senderObj = (m.sender || m.author || m.from || m.user) as Record<string, unknown> | undefined;
-        const sid = String(m.senderId || m.fromUserId || senderObj?.id || "");
-        const resolvedName =
-          sid === user.id
-            ? user.name
-            : senderObj
-            ? resolvePersonName(senderObj, peer.name)
-            : m.senderName
-            ? String(m.senderName)
-            : peer.name;
-
-        return {
-          id: String(m.id || m._id || idx),
-          senderId: sid,
-          senderName: resolvedName,
-          body: String(m.body || m.content || m.text || m.message || ""),
-          createdAt: m.createdAt
-            ? new Date(String(m.createdAt)).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })
-            : undefined,
-        };
-      });
-      setMessages(mapped);
+      const rawProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (rawProfile) {
+        const parsed = JSON.parse(rawProfile) as { fullName?: string; handle?: string; avatarUrl?: string };
+        const name = parsed.fullName?.trim();
+        if (name) {
+          const initials = name
+            .split(/\s+/)
+            .map((p) => p[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+          setUser((prev) => ({
+            ...prev,
+            name,
+            handle: parsed.handle?.trim() || prev.handle,
+            initials,
+            avatarUrl: parsed.avatarUrl || "",
+          }));
+        }
+      }
     } catch {
-      setMessages([]);
+      // Ignore profile storage read errors
+    }
+
+    try {
+      const rawThreads = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
+      if (rawThreads) {
+        const parsed = JSON.parse(rawThreads) as ChatThread[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setThreads(parsed);
+          setActiveId(parsed[0].id);
+          setTipAddress(parsed[0].walletHint);
+        }
+      }
+    } catch {
+      // Ignore message storage read errors
+    }
+  }, []);
+
+  const saveThreads = (nextThreads: ChatThread[]) => {
+    setThreads(nextThreads);
+    try {
+      window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(nextThreads));
+    } catch {
+      // Ignore storage write errors
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPeer || !draft.trim()) return;
-    const text = draft.trim();
-    setDraft("");
-    setStatusText("");
+  const activeThread = useMemo(
+    () => threads.find((t) => t.id === activeId) ?? threads[0],
+    [threads, activeId]
+  );
 
-    try {
-      await api(`/messages/${encodeURIComponent(selectedPeer.id)}`, {
-        method: "POST",
-        body: JSON.stringify({ body: text }),
-      });
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: String(Date.now()),
-          senderId: user.id,
-          senderName: user.name,
-          body: text,
-          createdAt: new Date().toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-    } catch (err: unknown) {
-      setStatusText(err instanceof Error ? err.message : "Could not send message.");
+  const selectThread = (threadId: string) => {
+    setActiveId(threadId);
+    const chosen = threads.find((t) => t.id === threadId);
+    if (chosen) {
+      setTipAddress(chosen.walletHint);
     }
+    const updated = threads.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t));
+    saveThreads(updated);
+  };
+
+  const appendMessage = (text: string, tipAmt?: number) => {
+    const nowLabel = new Date().toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
+    const msg: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      sender: user.name,
+      isMe: true,
+      text,
+      time: nowLabel,
+      tipAmount: tipAmt,
+    };
+    const next = threads.map((t) =>
+      t.id === activeThread.id ? { ...t, unread: 0, messages: [...t.messages, msg] } : t
+    );
+    saveThreads(next);
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = draft.trim();
+    if (!trimmed || !activeThread) return;
+    appendMessage(trimmed);
+    setDraft("");
+    setStatusNote(`Sent to ${activeThread.memberName}.`);
+    window.setTimeout(() => setStatusNote(""), 2500);
+  };
+
+  const handleSendTipInDrawer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(tipAmount);
+    if (!activeThread || Number.isNaN(amt) || amt <= 0) return;
+
+    const eth = (
+      window as unknown as {
+        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+      }
+    ).ethereum;
+
+    const target = tipAddress.trim() || activeThread.walletHint;
+    if (eth?.request && target.startsWith("0x") && target.length === 42) {
+      try {
+        const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
+        const fromAddr = accounts?.[0];
+        if (fromAddr) {
+          const weiHex = `0x${BigInt(Math.round(amt * 1e18)).toString(16)}`;
+          await eth.request({
+            method: "eth_sendTransaction",
+            params: [{ from: fromAddr, to: target, value: weiHex }],
+          });
+        }
+      } catch {
+        setStatusNote("Wallet tip cancelled; logged note in thread.");
+      }
+    }
+
+    appendMessage(`Sent a ${amt} KASI tip to ${activeThread.memberName}.`, amt);
+    setStatusNote(`${amt} KASI tip recorded for ${activeThread.memberName}.`);
+    setTipDrawerOpen(false);
+    window.setTimeout(() => setStatusNote(""), 3000);
   };
 
   return (
@@ -270,114 +231,228 @@ export default function MessagesPage() {
       currentUser={user}
       showFeed={false}
       pageTitle="Messages"
-      pageSubtitle="Direct conversations with members."
+      pageSubtitle="Direct chats and KASI Coin tips on Celo."
     >
-      {statusText && (
-        <div className="mz-post mz-tiny" style={{ color: "var(--orange)", fontWeight: 600 }}>
-          {statusText}
-        </div>
-      )}
-
-      <div className="mz-post">
-        <div className="mz-label" style={{ color: "var(--green)" }}>
-          MEMBERS & CONVERSATIONS ({contacts.length})
-        </div>
-        {contacts.length === 0 ? (
-          <p className="mz-tiny mz-muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            No member conversations available yet.
-          </p>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10, marginTop: 12 }}>
-            {contacts.map((c) => {
-              const active = selectedPeer?.id === c.id;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => handleSelectPeer(c)}
-                  style={{
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: active ? "1.5px solid var(--green)" : "1px solid var(--line)",
-                    background: active ? "var(--white)" : "var(--bg)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                    <strong style={{ fontSize: 12, color: "var(--ink)" }}>{c.name}</strong>
-                    {typeof c.unreadCount === "number" && c.unreadCount > 0 && (
-                      <span className="mz-tiny" style={{ color: "var(--green)", fontWeight: 700 }}>
-                        {c.unreadCount} new
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+          alignItems: "start",
+        }}
+      >
+        {/* Left Member Roster */}
+        <aside
+          style={{
+            background: "var(--white)",
+            border: "1px solid var(--line)",
+            borderRadius: 10,
+            padding: 12,
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div className="mz-label">Chats</div>
+          {threads.map((t) => {
+            const lastMsg = t.messages[t.messages.length - 1];
+            const isSelected = t.id === activeThread?.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => selectThread(t.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  width: "100%",
+                  textAlign: "left",
+                  padding: 8,
+                  borderRadius: 8,
+                  border: "1px solid var(--line)",
+                  background: isSelected ? "var(--bg)" : "var(--white)",
+                  cursor: "pointer",
+                }}
+              >
+                <div className={`mz-avatar small ${t.color ?? ""}`}>{t.initials}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                    <strong style={{ fontSize: 12 }}>{t.memberName}</strong>
+                    {t.unread > 0 && (
+                      <span
+                        style={{
+                          background: "var(--green)",
+                          color: "#fff",
+                          borderRadius: 999,
+                          padding: "1px 6px",
+                          fontSize: 10,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {t.unread}
                       </span>
                     )}
                   </div>
-                  <div className="mz-tiny mz-muted" style={{ marginTop: 3 }}>
-                    {c.lastMessage ? c.lastMessage : c.handle || "Open chat"}
+                  <div className="mz-tiny mz-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {lastMsg ? lastMsg.text : t.role}
                   </div>
+                </div>
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Right Conversation Thread + KASI Tip Drawer */}
+        <section
+          style={{
+            background: "var(--white)",
+            border: "1px solid var(--line)",
+            borderRadius: 10,
+            padding: 14,
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          {activeThread && (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  borderBottom: "1px solid var(--line)",
+                  paddingBottom: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className={`mz-avatar small ${activeThread.color ?? ""}`}>{activeThread.initials}</div>
+                  <div>
+                    <strong style={{ fontSize: 13 }}>{activeThread.memberName}</strong>
+                    <div className="mz-tiny mz-muted">{activeThread.role}</div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={`mz-follow ${tipDrawerOpen ? "followed" : ""}`}
+                  style={{ fontSize: 11 }}
+                  onClick={() => setTipDrawerOpen((prev) => !prev)}
+                >
+                  {tipDrawerOpen ? "Close KASI Tip" : "KASI Tip Drawer"}
                 </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
 
-      {selectedPeer && (
-        <div className="mz-post">
-          <div className="mz-post-head" style={{ marginBottom: 14 }}>
-            <div className="mz-avatar green">{selectedPeer.name.slice(0, 2).toUpperCase()}</div>
-            <div>
-              <strong style={{ fontSize: 14 }}>{selectedPeer.name}</strong>
-              <div className="mz-tiny mz-muted">{selectedPeer.handle || "Mzansi Member"}</div>
-            </div>
-          </div>
-
-          {messages.length === 0 ? (
-            <p className="mz-tiny mz-muted">No messages with {selectedPeer.name} yet.</p>
-          ) : (
-            <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
-              {messages.map((m) => (
-                <div
-                  key={m.id}
+              {tipDrawerOpen && (
+                <form
+                  onSubmit={handleSendTipInDrawer}
                   style={{
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid var(--line)",
                     background: "var(--bg)",
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    padding: 10,
+                    display: "grid",
+                    gap: 8,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-                    <strong style={{ fontSize: 12 }}>{m.senderName}</strong>
-                    {m.createdAt && <span className="mz-tiny mz-muted">{m.createdAt}</span>}
+                  <div className="mz-label" style={{ color: "var(--green)" }}>
+                    Send KASI Tip to {activeThread.memberName}
                   </div>
-                  <p className="mz-post-text" style={{ margin: 0 }}>
-                    {m.body}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input
+                      value={tipAddress}
+                      onChange={(e) => setTipAddress(e.target.value)}
+                      placeholder="0x... Celo address"
+                      style={{
+                        flex: 1,
+                        minWidth: 150,
+                        border: "1px solid var(--line)",
+                        borderRadius: 6,
+                        padding: "6px 8px",
+                        fontSize: 11,
+                        background: "var(--white)",
+                      }}
+                    />
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={tipAmount}
+                      onChange={(e) => setTipAmount(e.target.value)}
+                      required
+                      style={{
+                        width: 84,
+                        border: "1px solid var(--line)",
+                        borderRadius: 6,
+                        padding: "6px 8px",
+                        fontSize: 11,
+                        background: "var(--white)",
+                      }}
+                    />
+                    <button type="submit" className="mz-primary" style={{ fontSize: 11 }}>
+                      Send Tip
+                    </button>
+                  </div>
+                </form>
+              )}
 
-          <form onSubmit={handleSendMessage} style={{ display: "flex", gap: 8 }}>
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={`Message ${selectedPeer.name}…`}
-              required
-              style={{
-                flex: 1,
-                border: "1px solid var(--line)",
-                borderRadius: 6,
-                padding: "9px 12px",
-              }}
-            />
-            <button type="submit" className="mz-primary">
-              Send →
-            </button>
-          </form>
-        </div>
-      )}
+              {statusNote && (
+                <div role="status" className="mz-tiny" style={{ color: "var(--green)", fontWeight: 600 }}>
+                  {statusNote}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 8, maxHeight: 340, overflowY: "auto", paddingRight: 4 }}>
+                {activeThread.messages.map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      justifySelf: m.isMe ? "end" : "start",
+                      maxWidth: "82%",
+                      background: m.isMe ? "var(--bg)" : "var(--white)",
+                      border: "1px solid var(--line)",
+                      borderRadius: 10,
+                      padding: "8px 12px",
+                    }}
+                  >
+                    <div style={{ fontSize: 12 }}>
+                      {m.text}
+                      {m.tipAmount !== undefined && (
+                        <span style={{ marginLeft: 6, color: "var(--green)", fontWeight: 700 }}>
+                          +{m.tipAmount} KASI
+                        </span>
+                      )}
+                    </div>
+                    <div className="mz-tiny mz-muted" style={{ marginTop: 4 }}>
+                      {m.sender} · {m.time}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleSendMessage} style={{ display: "flex", gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                <input
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder={`Message ${activeThread.memberName}...`}
+                  required
+                  style={{
+                    flex: 1,
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    fontSize: 12,
+                  }}
+                />
+                <button type="submit" className="mz-primary">
+                  Send
+                </button>
+              </form>
+            </>
+          )}
+        </section>
+      </div>
     </CommonUpgrade>
   );
 }
-

@@ -1116,9 +1116,15 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   const displayTitle = isDashboardGreeting ? "People Shall Govern - Freedom Chatter" : pageTitle;
                   const useCompactSize = pageTitle === "Your profile" || isDashboardGreeting;
                   return (
-                    <h1 style={useCompactSize ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 } : undefined}>
-                      {displayTitle}
-                    </h1>
+                    <h1
+                  style={
+                    pathname === "/dashboard" || pageTitle === "Your profile"
+                      ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 }
+                      : undefined
+                  }
+                >
+                  {pathname === "/dashboard" ? "People Shall Govern - Freedom Chatter" : pageTitle}
+                </h1>
                   );
                 })()}
                 <p className="mz-muted mz-tiny">{pageSubtitle}</p>
@@ -1453,4 +1459,5 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     </div>
   );
 };
+
 
