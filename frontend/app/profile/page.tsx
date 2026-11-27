@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { CommonUpgrade, MzansiUser } from "../../components/CommonUpgrade";
 
 type ProfileTab = "details" | "overview" | "wallet";
@@ -18,55 +18,143 @@ interface PersonalDetailsForm {
   interests: string;
   preferredWallet: "MiniPay" | "MetaMask";
   walletAddress: string;
+  avatarUrl: string;
+  coverUrl: string;
 }
 
-const DEFAULT_USER: MzansiUser = {
-  id: "member-1",
-  name: "Member",
+const STORAGE_KEY = "mzansi_profile_details_v1";
+
+const DEFAULT_FORM: PersonalDetailsForm = {
+  fullName: "Member",
   handle: "@member",
-  initials: "M",
-  avatarColor: "green",
+  bio: "",
+  email: "",
+  phone: "",
+  city: "Soshanguve",
+  province: "Gauteng",
+  country: "South Africa",
+  communityRole: "Community Member",
+  interests: "KASI Coin, Local Spaces, Celo",
+  preferredWallet: "MiniPay",
+  walletAddress: "",
+  avatarUrl: "",
+  coverUrl: "",
 };
+
+function resizeImageFile(file: File, maxWidth: number, maxHeight: number, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read image."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Invalid image file."));
+      img.onload = () => {
+        const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(reader.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<ProfileTab>("details");
   const [savedBanner, setSavedBanner] = useState<string>("");
+  const [hydrated, setHydrated] = useState<boolean>(false);
+  const [form, setForm] = useState<PersonalDetailsForm>(DEFAULT_FORM);
 
-  const [form, setForm] = useState<PersonalDetailsForm>({
-    fullName: DEFAULT_USER.name,
-    handle: DEFAULT_USER.handle,
-    bio: "",
-    email: "",
-    phone: "",
-    city: "Soshanguve",
-    province: "Gauteng",
-    country: "South Africa",
-    communityRole: "Community Member",
-    interests: "KASI Coin, Local Spaces, Celo",
-    preferredWallet: "MiniPay",
-    walletAddress: "",
-  });
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersonalDetailsForm>;
+        setForm((prev) => ({ ...prev, ...parsed }));
+      }
+    } catch {
+      // Ignore storage read errors
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  const persistForm = (nextForm: PersonalDetailsForm, message = "Profile details saved.") => {
+    setForm(nextForm);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextForm));
+      setSavedBanner(message);
+    } catch {
+      setSavedBanner("Could not save to browser storage (image may be too large).");
+    }
+    window.setTimeout(() => setSavedBanner(""), 3200);
+  };
 
   const currentUser: MzansiUser = {
-    ...DEFAULT_USER,
-    name: form.fullName.trim() || DEFAULT_USER.name,
-    handle: form.handle.trim() || DEFAULT_USER.handle,
-    initials: (form.fullName.trim() || DEFAULT_USER.name)
+    id: "member-1",
+    name: form.fullName.trim() || DEFAULT_FORM.fullName,
+    handle: form.handle.trim() || DEFAULT_FORM.handle,
+    initials: (form.fullName.trim() || DEFAULT_FORM.fullName)
       .split(/\s+/)
       .map((part) => part[0])
       .join("")
       .slice(0, 2)
       .toUpperCase(),
+    avatarColor: "green",
   };
 
   const updateField = <K extends keyof PersonalDetailsForm>(key: K, value: PersonalDetailsForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setSavedBanner("Please choose an image file.");
+      return;
+    }
+    try {
+      const dataUrl = await resizeImageFile(file, 360, 360, 0.85);
+      persistForm({ ...form, avatarUrl: dataUrl }, "Profile picture updated.");
+    } catch {
+      setSavedBanner("Failed to process profile picture.");
+    }
+    e.target.value = "";
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setSavedBanner("Please choose an image file.");
+      return;
+    }
+    try {
+      const dataUrl = await resizeImageFile(file, 1200, 420, 0.82);
+      persistForm({ ...form, coverUrl: dataUrl }, "Cover background updated.");
+    } catch {
+      setSavedBanner("Failed to process cover background.");
+    }
+    e.target.value = "";
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedBanner("Profile details updated.");
-    window.setTimeout(() => setSavedBanner(""), 3000);
+    persistForm(form, "Profile details saved.");
   };
 
   return (
@@ -74,9 +162,183 @@ export default function ProfilePage() {
       currentUser={currentUser}
       showFeed={false}
       pageTitle="Your profile"
-      pageSubtitle="Personal details, contact info, and Celo wallet settings."
+      pageSubtitle="Personal details, photos, contact info, and Celo wallet settings."
     >
+      {/* Facebook-style Cover Banner + Overlapping Profile Picture Header */}
+      <section
+        style={{
+          background: "var(--white)",
+          border: "1px solid var(--line)",
+          borderRadius: 12,
+          overflow: "hidden",
+          marginBottom: 14,
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            height: 150,
+            background: form.coverUrl
+              ? `url("${form.coverUrl}") center / cover no-repeat`
+              : "linear-gradient(135deg, #1b4332 0%, #2d6a4f 55%, #d97706 100%)",
+          }}
+        >
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={handleCoverUpload}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 12,
+              bottom: 12,
+              display: "flex",
+              gap: 6,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              style={{
+                background: "rgba(255, 255, 255, 0.92)",
+                color: "#111",
+                border: "1px solid rgba(0,0,0,0.12)",
+                borderRadius: 6,
+                padding: "5px 10px",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {form.coverUrl ? "Change Cover" : "Upload Cover"}
+            </button>
+            {form.coverUrl && (
+              <button
+                type="button"
+                onClick={() => persistForm({ ...form, coverUrl: "" }, "Cover removed.")}
+                style={{
+                  background: "rgba(255, 255, 255, 0.92)",
+                  color: "#991b1b",
+                  border: "1px solid rgba(0,0,0,0.12)",
+                  borderRadius: 6,
+                  padding: "5px 8px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: "0 16px 14px",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginTop: -34 }}>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleAvatarUpload}
+              />
+              {form.avatarUrl ? (
+                <img
+                  src={form.avatarUrl}
+                  alt={currentUser.name}
+                  style={{
+                    width: 76,
+                    height: 76,
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "3px solid var(--white)",
+                    background: "var(--white)",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div
+                  className={`mz-avatar ${currentUser.avatarColor ?? ""}`}
+                  style={{
+                    width: 76,
+                    height: 76,
+                    fontSize: 22,
+                    border: "3px solid var(--white)",
+                  }}
+                >
+                  {currentUser.initials}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                title="Upload profile picture"
+                style={{
+                  position: "absolute",
+                  right: -2,
+                  bottom: -2,
+                  background: "var(--white)",
+                  border: "1px solid var(--line)",
+                  borderRadius: "999px",
+                  padding: "3px 7px",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+                }}
+              >
+                Photo
+              </button>
+            </div>
+
+            <div style={{ paddingBottom: 2 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                {hydrated ? currentUser.name : "Loading…"}
+              </div>
+              <div className="mz-tiny mz-muted">
+                {currentUser.handle} · {[form.city, form.country].filter(Boolean).join(", ")}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="mz-follow"
+              style={{ fontSize: 11 }}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              Upload Avatar
+            </button>
+            {form.avatarUrl && (
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ fontSize: 11 }}
+                onClick={() => persistForm({ ...form, avatarUrl: "" }, "Profile picture removed.")}
+              >
+                Remove Avatar
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, alignItems: "start" }}>
+        {/* Left Compact Summary Rail */}
         <aside
           style={{
             background: "var(--white)",
@@ -87,14 +349,7 @@ export default function ProfilePage() {
             gap: 10,
           }}
         >
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div className={`mz-avatar ${currentUser.avatarColor ?? ""}`}>{currentUser.initials}</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{currentUser.name}</div>
-              <div className="mz-tiny mz-muted">{currentUser.handle}</div>
-            </div>
-          </div>
-
+          <div className="mz-label">About</div>
           <p className="mz-tiny" style={{ margin: 0, lineHeight: 1.5 }}>
             {form.bio.trim() || "Add a short bio to introduce yourself to the community."}
           </p>
@@ -113,6 +368,7 @@ export default function ProfilePage() {
           </div>
         </aside>
 
+        {/* Right Tabbed Workspace */}
         <div
           style={{
             background: "var(--white)",
