@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import "../styles/common-upgrade.css";
@@ -19,6 +19,7 @@ export interface MzansiUser {
   handle: string;
   initials: string;
   avatarColor?: "" | "green" | "pink" | "blue";
+  avatarUrl?: string;
   unreadMessages?: number;
 }
 
@@ -73,6 +74,32 @@ interface CommonUpgradeProps {
   onClaimReward?: () => Promise<void> | void;
   children?: React.ReactNode;
 }
+
+const PROFILE_STORAGE_KEY = "mzansi_profile_details_v1";
+
+const UserAvatarBadge: React.FC<{ user: MzansiUser; small?: boolean }> = ({ user, small = false }) => {
+  if (user.avatarUrl) {
+    const size = small ? 28 : 34;
+    return (
+      <img
+        src={user.avatarUrl}
+        alt={user.name}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+  return (
+    <div className={`mz-avatar ${small ? "small" : ""} ${user.avatarColor ?? ""}`}>
+      {user.initials}
+    </div>
+  );
+};
 
 export const WatermarkBackdrop: React.FC<{ imageKey: WatermarkKey }> = ({ imageKey }) => {
   const src = WATERMARK_IMAGES[imageKey];
@@ -411,6 +438,49 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
+
+  const [savedProfile, setSavedProfile] = useState<Partial<MzansiUser> | null>(null);
+
+  useEffect(() => {
+    const loadSavedProfile = () => {
+      try {
+        const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as {
+          fullName?: string;
+          handle?: string;
+          avatarUrl?: string;
+        };
+        const name = parsed.fullName?.trim();
+        const handle = parsed.handle?.trim();
+        const initials = name
+          ? name
+              .split(/\s+/)
+              .map((part) => part[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()
+          : undefined;
+        setSavedProfile({
+          ...(name ? { name, initials } : {}),
+          ...(handle ? { handle } : {}),
+          avatarUrl: parsed.avatarUrl || "",
+        });
+      } catch {
+        // Ignore storage read errors
+      }
+    };
+
+    loadSavedProfile();
+    window.addEventListener("storage", loadSavedProfile);
+    return () => window.removeEventListener("storage", loadSavedProfile);
+  }, [pathname]);
+
+  const resolvedUser: MzansiUser = {
+    ...currentUser,
+    ...(savedProfile ?? {}),
+    avatarUrl: currentUser.avatarUrl ?? savedProfile?.avatarUrl ?? "",
+  };
 
   const [openBranches, setOpenBranches] = useState<{
     workspace: boolean;
@@ -817,10 +887,10 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
         </div>
 
         <Link href="/profile" className="mz-profile">
-          <div className={`mz-avatar ${currentUser.avatarColor ?? ""}`}>{currentUser.initials}</div>
+          <UserAvatarBadge user={resolvedUser} />
           <div>
-            <strong>{currentUser.name}</strong>
-            <div className="mz-tiny mz-muted">{currentUser.handle}</div>
+            <strong>{resolvedUser.name}</strong>
+            <div className="mz-tiny mz-muted">{resolvedUser.handle}</div>
           </div>
         </Link>
       </aside>
@@ -841,8 +911,8 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                 />
               </label>
             )}
-            <Link href="/profile" className={`mz-avatar small ${currentUser.avatarColor ?? ""}`}>
-              {currentUser.initials}
+            <Link href="/profile" aria-label="Your profile" style={{ display: "inline-flex" }}>
+              <UserAvatarBadge user={resolvedUser} small />
             </Link>
           </div>
         </header>
@@ -858,7 +928,9 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
             <div className="mz-greeting">
               <div>
                 <div className="mz-label">{todayLabel}</div>
-                <h1 style={pageTitle === "Your profile" ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 } : undefined}>{pageTitle}</h1>
+                <h1 style={pageTitle === "Your profile" ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 } : undefined}>
+                  {pageTitle}
+                </h1>
                 <p className="mz-muted mz-tiny">{pageSubtitle}</p>
               </div>
               <span style={{ fontSize: 24, color: "var(--orange)" }} aria-hidden="true">
@@ -896,11 +968,11 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                 {onCreatePost && (
                   <form className="mz-composer" onSubmit={handlePostSubmit}>
                     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      <div className={`mz-avatar ${currentUser.avatarColor ?? ""}`}>{currentUser.initials}</div>
+                      <UserAvatarBadge user={resolvedUser} />
                       <textarea
                         value={draftText}
                         onChange={(e) => setDraftText(e.target.value)}
-                        placeholder={`What is on your mind, ${currentUser.name.split(" ")[0]}?`}
+                        placeholder={`What is on your mind, ${resolvedUser.name.split(" ")[0]}?`}
                         maxLength={2000}
                         required
                       />
@@ -1116,4 +1188,3 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     </div>
   );
 };
-
