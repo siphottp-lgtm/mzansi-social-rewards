@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CommonUpgrade, MzansiUser } from "../../components/CommonUpgrade";
+import { fetchSharedMembers, makeInitials, SHARED_STORAGE_KEYS } from "../../lib/api";
 
 interface ChatMessage {
   id: string;
@@ -23,10 +24,10 @@ interface ChatThread {
   messages: ChatMessage[];
 }
 
-const MESSAGES_STORAGE_KEY = "mzansi_messages_v1";
-const PROFILE_STORAGE_KEY = "mzansi_profile_details_v1";
+const MESSAGES_STORAGE_KEY = SHARED_STORAGE_KEYS.messages;
+const PROFILE_STORAGE_KEY = SHARED_STORAGE_KEYS.profile;
 const MEMBER_STORAGE_KEYS = [
-  "mzansi_registered_members_v1",
+  SHARED_STORAGE_KEYS.members,
   "mzansi_members_v1",
   "mzansi_friends_v1",
   "mzansi_users_v1",
@@ -40,16 +41,6 @@ const DEFAULT_USER: MzansiUser = {
   initials: "M",
   avatarColor: "green",
 };
-
-function makeInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "M";
-  return parts
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 function normalizeMemberThreads(rawList: unknown[]): ChatThread[] {
   const colors: ("" | "green" | "pink" | "blue")[] = ["green", "pink", "blue", ""];
@@ -202,46 +193,42 @@ export default function MessagesPage() {
     }
 
     const fetchBackendMembers = async () => {
-      const endpoints = ["/api/friends", "/api/members"];
-      for (const url of endpoints) {
-        try {
-          const res = await fetch(url, { cache: "no-store" });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const list = Array.isArray(data)
-            ? data
-            : Array.isArray(data?.members)
-            ? data.members
-            : Array.isArray(data?.friends)
-            ? data.friends
-            : [];
-          const remoteThreads = normalizeMemberThreads(list);
-          if (remoteThreads.length > 0) {
-            setThreads((prev) => {
-              const byId = new Map<string, ChatThread>();
-              for (const rt of remoteThreads) byId.set(rt.id, rt);
-              for (const pt of prev) {
-                const found = byId.get(pt.id);
-                byId.set(
-                  pt.id,
-                  found
-                    ? {
-                        ...found,
-                        unread: pt.unread,
-                        messages: pt.messages.length > 0 ? pt.messages : found.messages,
-                      }
-                    : pt
-                );
-              }
-              const next = Array.from(byId.values());
-              setActiveId((cur) => cur || next[0]?.id || "");
-              return next;
-            });
-            break;
-          }
-        } catch {
-          // Backend endpoint not present or offline; continue using local data
+      try {
+        const remoteMembers = await fetchSharedMembers();
+        if (remoteMembers.length > 0) {
+          const remoteThreads: ChatThread[] = remoteMembers.map((m) => ({
+            id: m.id,
+            memberName: m.name,
+            handle: m.handle,
+            initials: m.initials || makeInitials(m.name),
+            role: m.role,
+            color: m.color,
+            unread: 0,
+            messages: [],
+          }));
+          setThreads((prev) => {
+            const byId = new Map<string, ChatThread>();
+            for (const rt of remoteThreads) byId.set(rt.id, rt);
+            for (const pt of prev) {
+              const found = byId.get(pt.id);
+              byId.set(
+                pt.id,
+                found
+                  ? {
+                      ...found,
+                      unread: pt.unread,
+                      messages: pt.messages.length > 0 ? pt.messages : found.messages,
+                    }
+                  : pt
+              );
+            }
+            const next = Array.from(byId.values());
+            setActiveId((cur) => cur || next[0]?.id || "");
+            return next;
+          });
         }
+      } catch {
+        // Keep local members when offline
       }
     };
 
@@ -317,7 +304,6 @@ export default function MessagesPage() {
           alignItems: "start",
         }}
       >
-        {/* Option 1 Left Inbox Rail */}
         <aside
           style={{
             background: "var(--white)",
@@ -414,7 +400,6 @@ export default function MessagesPage() {
           )}
         </aside>
 
-        {/* Option 1 Active Thread Workspace */}
         <section
           style={{
             background: "var(--white)",
