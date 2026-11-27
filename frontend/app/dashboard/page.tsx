@@ -8,7 +8,7 @@ import {
   type MzansiUser,
   type SuggestedMember,
 } from "../../components/CommonUpgrade";
-import { claimKasiReward } from "../../lib/celoRewards";
+import { claimKasicTaskReward } from "../../lib/celoRewards";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -291,7 +291,7 @@ export default function DashboardPage() {
 
   const handleClaimReward = async () => {
     try {
-      const txHash = await claimKasiReward();
+      const txHash = await claimKasicTaskReward("daily-community-reward");
       setStatusBanner(`KASI Coin reward claimed on Celo! Tx: ${txHash}`);
     } catch (err: unknown) {
       setStatusBanner(err instanceof Error ? err.message : "Connect Celo wallet to claim KASI Coin.");
@@ -321,3 +321,4 @@ export default function DashboardPage() {
     </CommonUpgrade>
   );
 }
+
