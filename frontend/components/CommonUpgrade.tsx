@@ -28,6 +28,7 @@ export interface MzansiPost {
   name: string;
   initials: string;
   color?: "" | "green" | "pink" | "blue";
+  avatarUrl?: string;
   time: string;
   space: string;
   following: boolean;
@@ -39,6 +40,7 @@ export interface MzansiPost {
   comments: number;
   replies?: { author: string; text: string }[];
   image?: string;
+  isCurrentUser?: boolean;
 }
 
 export interface MzansiSpace {
@@ -76,14 +78,49 @@ interface CommonUpgradeProps {
 }
 
 const PROFILE_STORAGE_KEY = "mzansi_profile_details_v1";
+const POSTS_STORAGE_KEY = "mzansi_feed_posts_v1";
 
-const UserAvatarBadge: React.FC<{ user: MzansiUser; small?: boolean }> = ({ user, small = false }) => {
-  if (user.avatarUrl) {
+function resizePostImageFile(file: File, maxWidth = 960, maxHeight = 720, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read photo."));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Invalid image file."));
+      img.onload = () => {
+        const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(reader.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const UserAvatarBadge: React.FC<{
+  name: string;
+  initials: string;
+  avatarColor?: "" | "green" | "pink" | "blue";
+  avatarUrl?: string;
+  small?: boolean;
+}> = ({ name, initials, avatarColor = "", avatarUrl = "", small = false }) => {
+  if (avatarUrl) {
     const size = small ? 28 : 34;
     return (
       <img
-        src={user.avatarUrl}
-        alt={user.name}
+        src={avatarUrl}
+        alt={name}
         style={{
           width: size,
           height: size,
@@ -95,8 +132,8 @@ const UserAvatarBadge: React.FC<{ user: MzansiUser; small?: boolean }> = ({ user
     );
   }
   return (
-    <div className={`mz-avatar ${small ? "small" : ""} ${user.avatarColor ?? ""}`}>
-      {user.initials}
+    <div className={`mz-avatar ${small ? "small" : ""} ${avatarColor}`}>
+      {initials}
     </div>
   );
 };
@@ -440,6 +477,10 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   const pathname = usePathname();
 
   const [savedProfile, setSavedProfile] = useState<Partial<MzansiUser> | null>(null);
+  const [persistedPosts, setPersistedPosts] = useState<MzansiPost[]>([]);
+  const [localReactions, setLocalReactions] = useState<
+    Record<string, { liked?: boolean; likesDelta?: number; saved?: boolean; extraReplies?: { author: string; text: string }[] }>
+  >({});
 
   useEffect(() => {
     const loadSavedProfile = () => {
@@ -471,9 +512,27 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
       }
     };
 
+    const loadSavedPosts = () => {
+      try {
+        const raw = window.localStorage.getItem(POSTS_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw) as MzansiPost[];
+        if (Array.isArray(parsed)) {
+          setPersistedPosts(parsed);
+        }
+      } catch {
+        // Ignore storage read errors
+      }
+    };
+
     loadSavedProfile();
+    loadSavedPosts();
     window.addEventListener("storage", loadSavedProfile);
-    return () => window.removeEventListener("storage", loadSavedProfile);
+    window.addEventListener("storage", loadSavedPosts);
+    return () => {
+      window.removeEventListener("storage", loadSavedProfile);
+      window.removeEventListener("storage", loadSavedPosts);
+    };
   }, [pathname]);
 
   const resolvedUser: MzansiUser = {
@@ -481,6 +540,50 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     ...(savedProfile ?? {}),
     avatarUrl: currentUser.avatarUrl ?? savedProfile?.avatarUrl ?? "",
   };
+
+  const isOwnPost = (post: MzansiPost) => {
+    if (post.isCurrentUser) return true;
+    const upperName = post.name.trim().toUpperCase();
+    const upperInitials = post.initials.trim().toUpperCase();
+    return (
+      upperName === "VK" ||
+      upperInitials === "VK" ||
+      upperName === currentUser.name.trim().toUpperCase() ||
+      upperName === resolvedUser.name.trim().toUpperCase()
+    );
+  };
+
+  const mergedPosts = useMemo<MzansiPost[]>(() => {
+    const seenIds = new Set<string>();
+    const combined: MzansiPost[] = [];
+
+    for (const p of [...persistedPosts, ...posts]) {
+      const key = String(p.id);
+      if (seenIds.has(key)) continue;
+      seenIds.add(key);
+
+      const own = isOwnPost(p);
+      const rx = localReactions[key];
+      const baseLikes = p.likes + (rx?.likesDelta ?? 0);
+      const baseReplies = p.replies ?? [];
+      const allReplies = rx?.extraReplies?.length ? [...baseReplies, ...rx.extraReplies] : baseReplies;
+
+      combined.push({
+        ...p,
+        name: own ? resolvedUser.name : p.name,
+        initials: own ? resolvedUser.initials : p.initials,
+        color: own ? resolvedUser.avatarColor ?? p.color : p.color,
+        avatarUrl: own ? resolvedUser.avatarUrl : p.avatarUrl,
+        liked: rx?.liked !== undefined ? rx.liked : p.liked,
+        likes: Math.max(0, baseLikes),
+        saved: rx?.saved !== undefined ? rx.saved : p.saved,
+        comments: p.comments + (rx?.extraReplies?.length ?? 0),
+        replies: allReplies,
+      });
+    }
+
+    return combined;
+  }, [persistedPosts, posts, resolvedUser, currentUser.name, localReactions]);
 
   const [openBranches, setOpenBranches] = useState<{
     workspace: boolean;
@@ -606,7 +709,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
 
   const visiblePosts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    let list = posts.filter((p) => {
+    let list = mergedPosts.filter((p) => {
       if (savedOnly && !p.saved) return false;
       if (selectedSpace && p.space !== selectedSpace) return false;
       if (filter === "following" && !p.following) return false;
@@ -617,37 +720,104 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
       list = [...list].sort((a, b) => Number(b.id) - Number(a.id));
     }
     return list;
-  }, [posts, savedOnly, selectedSpace, filter, searchQuery]);
+  }, [mergedPosts, savedOnly, selectedSpace, filter, searchQuery]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
-      showNotice("Choose an image under 2 MB.");
+    if (!file.type.startsWith("image/")) {
+      showNotice("Choose an image file.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setDraftImage(reader.result);
-        showNotice("Photo attached.");
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const resized = await resizePostImageFile(file, 960, 720, 0.8);
+      setDraftImage(resized);
+      showNotice("Photo attached.");
+    } catch {
+      showNotice("Could not process photo.");
+    }
+    e.target.value = "";
   };
 
   const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = draftText.trim();
-    if (!trimmed || !onCreatePost) return;
-    await onCreatePost({
+    if (!trimmed) return;
+
+    const spaceName = selectedSpace || spaces[0]?.name || "Community";
+    const newPost: MzansiPost = {
+      id: Date.now(),
+      name: resolvedUser.name,
+      initials: resolvedUser.initials,
+      color: resolvedUser.avatarColor ?? "green",
+      avatarUrl: resolvedUser.avatarUrl,
+      time: "Just now",
+      space: spaceName,
+      following: true,
       text: trimmed,
-      space: selectedSpace || spaces[0]?.name || "Community",
+      likes: 0,
+      liked: false,
+      saved: false,
+      comments: 0,
+      replies: [],
       image: draftImage || undefined,
-    });
+      isCurrentUser: true,
+    };
+
+    const nextSavedPosts = [newPost, ...persistedPosts];
+    setPersistedPosts(nextSavedPosts);
+    try {
+      window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextSavedPosts));
+    } catch {
+      const withoutImage = [{ ...newPost, image: undefined }, ...persistedPosts];
+      setPersistedPosts(withoutImage);
+      try {
+        window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(withoutImage));
+      } catch {
+        // Ignore storage error
+      }
+    }
+
+    if (onCreatePost) {
+      try {
+        await onCreatePost({
+          text: trimmed,
+          space: spaceName,
+          image: draftImage || undefined,
+        });
+      } catch {
+        // Post remains saved locally even if remote API fails
+      }
+    }
+
     setDraftText("");
     setDraftImage("");
     showNotice("Post published.");
+  };
+
+  const handleLikeClick = async (post: MzansiPost) => {
+    const key = String(post.id);
+    const nextLiked = !post.liked;
+    setLocalReactions((prev) => {
+      const cur = prev[key] ?? {};
+      const delta = (cur.likesDelta ?? 0) + (nextLiked ? 1 : -1);
+      return { ...prev, [key]: { ...cur, liked: nextLiked, likesDelta: delta } };
+    });
+    if (onToggleLike) {
+      await onToggleLike(post.id);
+    }
+  };
+
+  const handleSaveClick = async (post: MzansiPost) => {
+    const key = String(post.id);
+    const nextSaved = !post.saved;
+    setLocalReactions((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? {}), saved: nextSaved },
+    }));
+    if (onToggleSave) {
+      await onToggleSave(post.id);
+    }
   };
 
   const todayLabel = new Date()
@@ -887,7 +1057,12 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
         </div>
 
         <Link href="/profile" className="mz-profile">
-          <UserAvatarBadge user={resolvedUser} />
+          <UserAvatarBadge
+            name={resolvedUser.name}
+            initials={resolvedUser.initials}
+            avatarColor={resolvedUser.avatarColor}
+            avatarUrl={resolvedUser.avatarUrl}
+          />
           <div>
             <strong>{resolvedUser.name}</strong>
             <div className="mz-tiny mz-muted">{resolvedUser.handle}</div>
@@ -912,7 +1087,13 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
               </label>
             )}
             <Link href="/profile" aria-label="Your profile" style={{ display: "inline-flex" }}>
-              <UserAvatarBadge user={resolvedUser} small />
+              <UserAvatarBadge
+                name={resolvedUser.name}
+                initials={resolvedUser.initials}
+                avatarColor={resolvedUser.avatarColor}
+                avatarUrl={resolvedUser.avatarUrl}
+                small
+              />
             </Link>
           </div>
         </header>
@@ -942,93 +1123,125 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
 
             {showFeed && (
               <>
-                <section className="mz-banner">
-                  <div className="mz-label" style={{ color: "var(--green)" }}>
-                    KASI Coin · Celo
+                <form className="mz-composer" onSubmit={handlePostSubmit}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <UserAvatarBadge
+                      name={resolvedUser.name}
+                      initials={resolvedUser.initials}
+                      avatarColor={resolvedUser.avatarColor}
+                      avatarUrl={resolvedUser.avatarUrl}
+                    />
+                    <textarea
+                      value={draftText}
+                      onChange={(e) => setDraftText(e.target.value)}
+                      placeholder={`What is on your mind, ${resolvedUser.name.split(" ")[0]}?`}
+                      maxLength={2000}
+                      required
+                    />
                   </div>
-                  <h2>Less scrolling. More belonging.</h2>
-                  <p className="mz-tiny mz-muted">
-                    Share updates, connect with members, and claim KASI Coin rewards on Celo.
-                  </p>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-                    <button type="button" className="mz-primary" onClick={handleTriggerClaim}>
-                      Claim KASI Coin →
+                  {draftImage && (
+                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                      <img
+                        src={draftImage}
+                        alt="Preview"
+                        style={{ maxHeight: 180, borderRadius: 8, objectFit: "cover" }}
+                      />
+                      <button
+                        type="button"
+                        className="mz-follow"
+                        style={{ fontSize: 11 }}
+                        onClick={() => setDraftImage("")}
+                      >
+                        Remove photo
+                      </button>
+                    </div>
+                  )}
+                  <div className="mz-composer-bottom">
+                    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                      <label className="mz-action">
+                        Photo
+                        <input type="file" accept="image/*" hidden onChange={handleImageChange} />
+                      </label>
+                      <button
+                        type="button"
+                        className="mz-action"
+                        onClick={() => setDraftText((t) => `${t} 🇿🇦`)}
+                      >
+                        Add 🇿🇦
+                      </button>
+                    </div>
+                    <button className="mz-primary" type="submit">
+                      Post →
+                    </button>
+                  </div>
+                </form>
+
+                {/* Option 2 Quick Filter Strip + Space Chips */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  <div className="mz-tabs" role="tablist" aria-label="Feed filter" style={{ marginBottom: 0 }}>
+                    <button
+                      type="button"
+                      className={!savedOnly && filter === "all" ? "active" : ""}
+                      onClick={() => {
+                        setSavedOnly(false);
+                        setFilter("all");
+                      }}
+                    >
+                      For you
                     </button>
                     <button
                       type="button"
-                      className="mz-follow"
-                      style={{ background: "var(--white)", fontSize: 11 }}
-                      onClick={handleConnectWalletInfo}
+                      className={!savedOnly && filter === "following" ? "active" : ""}
+                      onClick={() => {
+                        setSavedOnly(false);
+                        setFilter("following");
+                      }}
                     >
-                      {walletAddress ? `Wallet: ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
+                      Following
+                    </button>
+                    <button
+                      type="button"
+                      className={!savedOnly && filter === "latest" ? "active" : ""}
+                      onClick={() => {
+                        setSavedOnly(false);
+                        setFilter("latest");
+                      }}
+                    >
+                      Latest
+                    </button>
+                    <button
+                      type="button"
+                      className={savedOnly ? "active" : ""}
+                      onClick={() => setSavedOnly((prev) => !prev)}
+                    >
+                      Saved
                     </button>
                   </div>
-                </section>
 
-                {onCreatePost && (
-                  <form className="mz-composer" onSubmit={handlePostSubmit}>
-                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                      <UserAvatarBadge user={resolvedUser} />
-                      <textarea
-                        value={draftText}
-                        onChange={(e) => setDraftText(e.target.value)}
-                        placeholder={`What is on your mind, ${resolvedUser.name.split(" ")[0]}?`}
-                        maxLength={2000}
-                        required
-                      />
-                    </div>
-                    {draftImage && (
-                      <div style={{ marginTop: 10 }}>
-                        <img
-                          src={draftImage}
-                          alt="Preview"
-                          style={{ maxHeight: 180, borderRadius: 8, objectFit: "cover" }}
-                        />
-                      </div>
-                    )}
-                    <div className="mz-composer-bottom">
-                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                        <label className="mz-action">
-                          Photo
-                          <input type="file" accept="image/*" hidden onChange={handleImageChange} />
-                        </label>
+                  {spaces.length > 0 && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {spaces.map((sp) => (
                         <button
+                          key={sp.id}
                           type="button"
-                          className="mz-action"
-                          onClick={() => setDraftText((t) => `${t} 🇿🇦`)}
+                          className={`mz-follow ${selectedSpace === sp.name ? "followed" : ""}`}
+                          style={{ fontSize: 11 }}
+                          onClick={() => setSelectedSpace((prev) => (prev === sp.name ? "" : sp.name))}
                         >
-                          Add 🇿🇦
+                          {sp.icon} {sp.name}
                         </button>
-                      </div>
-                      <button className="mz-primary" type="submit">
-                        Post →
-                      </button>
+                      ))}
                     </div>
-                  </form>
-                )}
-
-                <div className="mz-tabs" role="tablist" aria-label="Feed filter">
-                  <button
-                    type="button"
-                    className={filter === "all" ? "active" : ""}
-                    onClick={() => setFilter("all")}
-                  >
-                    For you
-                  </button>
-                  <button
-                    type="button"
-                    className={filter === "following" ? "active" : ""}
-                    onClick={() => setFilter("following")}
-                  >
-                    Following
-                  </button>
-                  <button
-                    type="button"
-                    className={filter === "latest" ? "active" : ""}
-                    onClick={() => setFilter("latest")}
-                  >
-                    Latest
-                  </button>
+                  )}
                 </div>
 
                 <div>
@@ -1040,7 +1253,12 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                     visiblePosts.map((post) => (
                       <article key={post.id} className="mz-post">
                         <div className="mz-post-head">
-                          <div className={`mz-avatar ${post.color ?? ""}`}>{post.initials}</div>
+                          <UserAvatarBadge
+                            name={post.name}
+                            initials={post.initials}
+                            avatarColor={post.color}
+                            avatarUrl={post.avatarUrl}
+                          />
                           <div>
                             <strong style={{ fontSize: 12 }}>{post.name}</strong>
                             <div className="mz-tiny mz-muted">
@@ -1063,46 +1281,51 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                         )}
 
                         <div className="mz-post-footer">
-                          {onToggleLike && (
-                            <button
-                              type="button"
-                              className={`mz-action ${post.liked ? "active" : ""}`}
-                              onClick={() => onToggleLike(post.id)}
-                            >
-                              ♥ {post.likes}
-                            </button>
-                          )}
-                          {onAddComment && (
-                            <button
-                              type="button"
-                              className="mz-action"
-                              onClick={() => {
-                                setOpenReplyId((prev) => (prev === post.id ? null : post.id));
-                                setReplyText("");
-                              }}
-                            >
-                              💬 {post.comments}
-                            </button>
-                          )}
-                          {onToggleSave && (
-                            <button
-                              type="button"
-                              className={`mz-action mz-save ${post.saved ? "active" : ""}`}
-                              onClick={() => onToggleSave(post.id)}
-                            >
-                              {post.saved ? "Saved" : "Save"}
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            className={`mz-action ${post.liked ? "active" : ""}`}
+                            onClick={() => handleLikeClick(post)}
+                          >
+                            ♥ {post.likes}
+                          </button>
+                          <button
+                            type="button"
+                            className="mz-action"
+                            onClick={() => {
+                              setOpenReplyId((prev) => (prev === post.id ? null : post.id));
+                              setReplyText("");
+                            }}
+                          >
+                            💬 {post.comments}
+                          </button>
+                          <button
+                            type="button"
+                            className={`mz-action mz-save ${post.saved ? "active" : ""}`}
+                            onClick={() => handleSaveClick(post)}
+                          >
+                            {post.saved ? "Saved" : "Save"}
+                          </button>
                         </div>
 
-                        {openReplyId === post.id && onAddComment && (
+                        {openReplyId === post.id && (
                           <form
                             style={{ display: "flex", gap: 8, marginTop: 12 }}
                             onSubmit={async (e) => {
                               e.preventDefault();
                               const trimmed = replyText.trim();
                               if (!trimmed) return;
-                              await onAddComment(post.id, trimmed);
+                              const key = String(post.id);
+                              setLocalReactions((prev) => {
+                                const cur = prev[key] ?? {};
+                                const nextReplies = [
+                                  ...(cur.extraReplies ?? []),
+                                  { author: resolvedUser.name, text: trimmed },
+                                ];
+                                return { ...prev, [key]: { ...cur, extraReplies: nextReplies } };
+                              });
+                              if (onAddComment) {
+                                await onAddComment(post.id, trimmed);
+                              }
                               setReplyText("");
                               setOpenReplyId(null);
                             }}
@@ -1147,29 +1370,62 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
             )}
           </section>
 
-          {showFeed && suggestedMembers.length > 0 && onToggleFollow && (
-            <aside className="mz-rail" aria-label="Community activity">
-              <section className="mz-rail-section">
-                <div className="mz-rail-heading">
-                  <h2>Members</h2>
+          {showFeed && (
+            <aside className="mz-rail" aria-label="KASI wallet and community">
+              <section
+                className="mz-rail-section"
+                style={{
+                  background: "var(--white)",
+                  border: "1px solid var(--line)",
+                  borderRadius: 10,
+                  padding: 12,
+                  marginBottom: 12,
+                }}
+              >
+                <div className="mz-label" style={{ color: "var(--green)", marginBottom: 4 }}>
+                  KASI Coin · Celo
                 </div>
-                {suggestedMembers.map((member) => (
-                  <div key={member.id} className="mz-person">
-                    <div className={`mz-avatar small ${member.color ?? ""}`}>{member.initials}</div>
-                    <div>
-                      <strong style={{ fontSize: 11 }}>{member.name}</strong>
-                      <div className="mz-tiny mz-muted">{member.role}</div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`mz-follow ${member.following ? "followed" : ""}`}
-                      onClick={() => onToggleFollow(member.id)}
-                    >
-                      {member.following ? "Following" : "Follow"}
-                    </button>
-                  </div>
-                ))}
+                <div className="mz-tiny mz-muted" style={{ marginBottom: 10 }}>
+                  Status: {claimStatus}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" className="mz-primary" onClick={handleTriggerClaim}>
+                    Claim KASI
+                  </button>
+                  <button
+                    type="button"
+                    className="mz-follow"
+                    style={{ fontSize: 11 }}
+                    onClick={handleConnectWalletInfo}
+                  >
+                    {walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
+                  </button>
+                </div>
               </section>
+
+              {suggestedMembers.length > 0 && onToggleFollow && (
+                <section className="mz-rail-section">
+                  <div className="mz-rail-heading">
+                    <h2>Members</h2>
+                  </div>
+                  {suggestedMembers.map((member) => (
+                    <div key={member.id} className="mz-person">
+                      <div className={`mz-avatar small ${member.color ?? ""}`}>{member.initials}</div>
+                      <div>
+                        <strong style={{ fontSize: 11 }}>{member.name}</strong>
+                        <div className="mz-tiny mz-muted">{member.role}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`mz-follow ${member.following ? "followed" : ""}`}
+                        onClick={() => onToggleFollow(member.id)}
+                      >
+                        {member.following ? "Following" : "Follow"}
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              )}
             </aside>
           )}
         </main>
