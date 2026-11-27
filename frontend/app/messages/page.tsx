@@ -197,7 +197,7 @@ export default function MessagesPage() {
         const remoteMembers = await fetchSharedMembers();
         if (remoteMembers.length > 0) {
           const remoteThreads: ChatThread[] = remoteMembers.map((m) => ({
-            id: m.id,
+            id: String(m.id),
             memberName: m.name,
             handle: m.handle,
             initials: m.initials || makeInitials(m.name),
@@ -274,7 +274,7 @@ export default function MessagesPage() {
     const nowLabel = new Date().toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
     const msg: ChatMessage = {
       id: `msg-${Date.now()}`,
-      sender: user.name,
+      sender: (user.name ?? ""),
       isMe: true,
       text: trimmed,
       time: nowLabel,
@@ -500,3 +500,5 @@ export default function MessagesPage() {
     </CommonUpgrade>
   );
 }
+
+

@@ -1,1461 +1,863 @@
 ﻿"use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import "../styles/common-upgrade.css";
+import { useRouter } from "next/navigation";
 
 export const WATERMARK_IMAGES = {
-  image1: "/images/1789794530888.jpg",
-  image2: "/images/1795326848083.jpg",
-  image3: "/images/1789669657455.jpg",
+  image1: "/images/image1.jpg",
+  image2: "/images/image2.jpg",
+  image3: "/images/image3.jpg",
 } as const;
 
 export type WatermarkKey = keyof typeof WATERMARK_IMAGES;
 
 export interface MzansiUser {
-  id: string;
-  name: string;
-  handle: string;
-  initials: string;
-  avatarColor?: "" | "green" | "pink" | "blue";
-  avatarUrl?: string;
-  unreadMessages?: number;
+  id?: string | number;
+  userId?: string | number;
+  name?: string;
+  fullName?: string;
+  displayName?: string;
+  handle?: string;
+  email?: string;
+  role?: string;
+  avatar?: string;
+  initials?: string;
+  color?: string;
+  avatarColor?: string;
+  following?: boolean;
+  [key: string]: unknown;
+}
+
+export interface MzansiPostComment {
+  id?: string | number;
+  author?: string;
+  text: string;
+  createdAt?: string;
 }
 
 export interface MzansiPost {
   id: string | number;
-  name: string;
-  initials: string;
-  color?: "" | "green" | "pink" | "blue";
-  avatarUrl?: string;
-  time: string;
-  space: string;
-  following: boolean;
-  text: string;
-  tag?: string;
-  likes: number;
+  title?: string;
+  body?: string;
+  content?: string;
+  text?: string;
+  name?: string;
+  author?: string;
+  authorId?: string | number;
+  handle?: string;
+  initials?: string;
+  color?: string;
+  time?: string;
+  space?: string;
+  createdAt?: string;
+  following?: boolean;
+  likes?: number;
   liked?: boolean;
   saved?: boolean;
-  comments: number;
-  replies?: { author: string; text: string }[];
+  comments?: number | MzansiPostComment[];
+  replies?: MzansiPostComment[];
   image?: string;
-  isCurrentUser?: boolean;
+  imageUrl?: string;
+  [key: string]: unknown;
 }
 
 export interface MzansiSpace {
   id: string;
   name: string;
-  icon: string;
-  badgeBg?: string;
+  description?: string;
+  memberCount?: number;
 }
 
 export interface SuggestedMember {
   id: string;
   name: string;
-  role: string;
-  initials: string;
-  color?: "" | "green" | "pink" | "blue";
-  following: boolean;
+  role?: string;
+  initials?: string;
+  color?: string;
+  following?: boolean;
 }
 
-interface CommonUpgradeProps {
-  currentUser: MzansiUser;
-  posts?: MzansiPost[];
+export interface SwipeUpTaskbarProps {
   spaces?: MzansiSpace[];
-  suggestedMembers?: SuggestedMember[];
-  showFeed?: boolean;
+  selectedSpace?: string;
+  onSelectSpace?: (space: string) => void;
+  onConnectWallet?: () => void;
+  onClaimReward?: () => void;
+  onSendTip?: (amount?: number) => void;
+  walletAddress?: string;
+  claimStatus?: string;
+}
+
+export interface CommonUpgradeProps {
+  children?: React.ReactNode;
   watermarkKey?: WatermarkKey;
-  pageTitle?: string;
-  pageSubtitle?: string;
-  onCreatePost?: (payload: { text: string; space: string; image?: string }) => Promise<void> | void;
+  activeNav?: string;
+  currentUser?: MzansiUser | null;
+  posts?: MzansiPost[];
+  onCreatePost?: (payload: {
+    title?: string;
+    body?: string;
+    text?: string;
+    space?: string;
+    image?: string;
+    imageUrl?: string;
+  }) => Promise<void> | void;
   onToggleLike?: (postId: string | number) => Promise<void> | void;
   onToggleSave?: (postId: string | number) => Promise<void> | void;
   onAddComment?: (postId: string | number, text: string) => Promise<void> | void;
-  onToggleFollow?: (memberId: string) => Promise<void> | void;
-  onClaimReward?: () => Promise<void> | void;
-  children?: React.ReactNode;
+  onDeletePost?: (postId: string | number) => Promise<void> | void;
+  onEditPost?: (postId: string | number, body: string) => Promise<void> | void;
+  spaces?: MzansiSpace[];
+  selectedSpace?: string;
+  onSelectSpace?: (space: string) => void;
+  suggestedMembers?: SuggestedMember[];
+  onToggleFollow?: (memberId: string) => void;
+  walletAddress?: string;
+  claimStatus?: string;
+  onConnectWallet?: () => void;
+  onClaimReward?: () => void;
+  onSendTip?: (amount?: number) => void;
+  showFeed?: boolean;
+  pageTitle?: string;
+  pageSubtitle?: string;
 }
 
-const PROFILE_STORAGE_KEY = "mzansi_profile_details_v1";
-const POSTS_STORAGE_KEY = "mzansi_feed_posts_v1";
-
-function resizePostImageFile(file: File, maxWidth = 960, maxHeight = 720, quality = 0.8): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read photo."));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Invalid image file."));
-      img.onload = () => {
-        const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(reader.result as string);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-const UserAvatarBadge: React.FC<{
-  name: string;
-  initials: string;
-  avatarColor?: "" | "green" | "pink" | "blue";
-  avatarUrl?: string;
-  small?: boolean;
-}> = ({ name, initials, avatarColor = "", avatarUrl = "", small = false }) => {
-  if (avatarUrl) {
-    const size = small ? 28 : 34;
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        style={{
-          width: size,
-          height: size,
-          borderRadius: "50%",
-          objectFit: "cover",
-          flexShrink: 0,
-        }}
-      />
-    );
-  }
-  return (
-    <div className={`mz-avatar ${small ? "small" : ""} ${avatarColor}`}>
-      {initials}
-    </div>
-  );
-};
-
-export const WatermarkBackdrop: React.FC<{ imageKey: WatermarkKey }> = ({ imageKey }) => {
-  const src = WATERMARK_IMAGES[imageKey];
+export const WatermarkBackdrop: React.FC<{ imageKey?: WatermarkKey }> = ({ imageKey = "image1" }) => {
+  const src = WATERMARK_IMAGES[imageKey] || WATERMARK_IMAGES.image1;
   return (
     <div
       aria-hidden="true"
       style={{
         position: "fixed",
         inset: 0,
-        pointerEvents: "none",
         zIndex: 0,
-        opacity: 0.1,
+        pointerEvents: "none",
         backgroundImage: `url("${src}")`,
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
+        opacity: 0.24,
       }}
     />
   );
 };
 
-interface SwipeUpTaskbarProps {
-  spaces?: MzansiSpace[];
-  selectedSpace?: string;
-  onSelectSpace?: (spaceName: string) => void;
-  onConnectWallet?: () => void;
-  onClaimReward?: () => void;
-  onSendTip?: (recipient: string, amount: number) => Promise<void> | void;
-  walletAddress?: string;
-  claimStatus?: string;
-}
+export const MzansiBrandMark: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
+  <Link
+    href="/"
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      textDecoration: "none",
+      color: "#0b0f14",
+      fontWeight: 800,
+      fontSize: compact ? 15 : 18,
+      letterSpacing: "-0.02em",
+    }}
+  >
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: compact ? 26 : 32,
+        height: compact ? 26 : 32,
+        borderRadius: 8,
+        background: "linear-gradient(135deg, #007749 0%, #ffb81c 55%, #de3831 100%)",
+        color: "#ffffff",
+        fontSize: compact ? 12 : 14,
+        fontWeight: 900,
+        border: "1px solid #000000",
+      }}
+    >
+      🇿🇦
+    </span>
+    <span>
+      mzansi<span style={{ color: "#007749" }}>.</span>
+    </span>
+  </Link>
+);
 
 export const SwipeUpTaskbar: React.FC<SwipeUpTaskbarProps> = ({
   spaces = [],
-  selectedSpace = "",
+  selectedSpace = "All",
   onSelectSpace,
   onConnectWallet,
   onClaimReward,
   onSendTip,
   walletAddress = "",
-  claimStatus = "Celo ready",
+  claimStatus = "Ready",
 }) => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [expanded, setExpanded] = useState<boolean>(false);
-  const [activeTree, setActiveTree] = useState<"workspace" | "kasiCoin" | "groups">("workspace");
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
-  const [tipOpen, setTipOpen] = useState<boolean>(false);
-  const [tipRecipient, setTipRecipient] = useState<string>("");
-  const [tipAmount, setTipAmount] = useState<string>("10");
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    setTouchStartY(e.touches[0]?.clientY ?? null);
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (touchStartY === null) return;
-    const endY = e.changedTouches[0]?.clientY ?? touchStartY;
-    const deltaY = touchStartY - endY;
-    if (deltaY > 20) setExpanded(true);
-    if (deltaY < -20) setExpanded(false);
-    setTouchStartY(null);
-  };
-
-  const openTree = (tree: "workspace" | "kasiCoin" | "groups") => {
-    setActiveTree(tree);
-    setExpanded(true);
-  };
-
-  const handleTipSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = Number(tipAmount);
-    if (!tipRecipient.trim() || Number.isNaN(amt) || amt <= 0) return;
-    if (onSendTip) {
-      await onSendTip(tipRecipient.trim(), amt);
-    }
-    setTipRecipient("");
-    setTipOpen(false);
-  };
+  const [open, setOpen] = useState(false);
 
   return (
     <div
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
       style={{
         position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
+        left: 12,
+        right: 12,
+        bottom: 36,
         zIndex: 50,
-        background: "var(--white)",
-        borderTop: "1px solid var(--line)",
-        boxShadow: "0 -6px 20px rgba(26, 25, 22, 0.08)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        pointerEvents: "none",
       }}
     >
-      <div
-        style={{
-          maxWidth: 1120,
-          margin: "0 auto",
-          padding: "8px 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setExpanded((prev) => !prev)}
-          style={{
-            background: "none",
-            border: 0,
-            padding: "4px 6px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--ink)",
-          }}
-        >
-          <span>{expanded ? "▾" : "▴"}</span>
-          <span>Menu</span>
-        </button>
-
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <button
-            type="button"
-            className={`mz-follow ${expanded && activeTree === "workspace" ? "followed" : ""}`}
-            onClick={() => openTree("workspace")}
-          >
-            Workspace
-          </button>
-          <button
-            type="button"
-            className={`mz-follow ${expanded && activeTree === "kasiCoin" ? "followed" : ""}`}
-            onClick={() => openTree("kasiCoin")}
-          >
-            KASI Coin
-          </button>
-          <button
-            type="button"
-            className={`mz-follow ${expanded && activeTree === "groups" ? "followed" : ""}`}
-            onClick={() => openTree("groups")}
-          >
-            Groups & Pages
-          </button>
-        </div>
-      </div>
-
-      {expanded && (
+      {open && (
         <div
+          className="mz-glass-card"
           style={{
-            maxWidth: 1120,
-            margin: "0 auto",
-            padding: "4px 14px 14px",
-            borderTop: "1px solid var(--line)",
+            pointerEvents: "auto",
+            width: "100%",
+            maxWidth: 640,
+            marginBottom: 8,
+            borderRadius: 14,
+            padding: 12,
+            display: "grid",
+            gap: 10,
           }}
         >
-          {activeTree === "workspace" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 10 }}>
-              <button
-                type="button"
-                className={`mz-follow ${pathname === "/dashboard" ? "followed" : ""}`}
-                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
-                onClick={() => {
-                  setExpanded(false);
-                  router.push("/dashboard");
-                }}
-              >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span className="mz-label" style={{ color: "#007749" }}>
+              Mzansi Quick Bar · {claimStatus}
+            </span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <Link href="/dashboard" className="mz-follow" onClick={() => setOpen(false)}>
                 Feed
-              </button>
-              <button
-                type="button"
-                className={`mz-follow ${pathname === "/friends" ? "followed" : ""}`}
-                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
-                onClick={() => {
-                  setExpanded(false);
-                  router.push("/friends");
-                }}
-              >
-                Friends & Members
-              </button>
-              <button
-                type="button"
-                className={`mz-follow ${pathname === "/messages" ? "followed" : ""}`}
-                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
-                onClick={() => {
-                  setExpanded(false);
-                  router.push("/messages");
-                }}
-              >
+              </Link>
+              <Link href="/friends" className="mz-follow" onClick={() => setOpen(false)}>
+                Friends
+              </Link>
+              <Link href="/messages" className="mz-follow" onClick={() => setOpen(false)}>
                 Messages
-              </button>
+              </Link>
+              <Link href="/profile" className="mz-follow" onClick={() => setOpen(false)}>
+                Profile
+              </Link>
+            </div>
+          </div>
+
+          {spaces.length > 0 && onSelectSpace && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <button
                 type="button"
-                className={`mz-follow ${pathname === "/profile" ? "followed" : ""}`}
-                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
-                onClick={() => {
-                  setExpanded(false);
-                  router.push("/profile");
-                }}
+                className={selectedSpace === "All" ? "mz-primary" : "mz-follow"}
+                onClick={() => onSelectSpace("All")}
               >
-                Profile
+                All Spaces
               </button>
-            </div>
-          )}
-
-          {activeTree === "kasiCoin" && (
-            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                {onConnectWallet && (
-                  <button type="button" className="mz-follow" style={{ fontSize: 11 }} onClick={onConnectWallet}>
-                    {walletAddress ? `Wallet: ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
-                  </button>
-                )}
-                {onClaimReward && (
-                  <button type="button" className="mz-primary" onClick={onClaimReward}>
-                    Claim KASI Coin
-                  </button>
-                )}
+              {spaces.map((sp) => (
                 <button
+                  key={sp.id}
                   type="button"
-                  className="mz-follow"
-                  style={{ fontSize: 11 }}
-                  onClick={() => setTipOpen((prev) => !prev)}
+                  className={selectedSpace === sp.name ? "mz-primary" : "mz-follow"}
+                  onClick={() => onSelectSpace(sp.name)}
                 >
-                  Send KASI Tip
+                  {sp.name}
                 </button>
-                <span className="mz-tiny mz-muted">{claimStatus}</span>
-              </div>
-
-              {tipOpen && onSendTip && (
-                <form onSubmit={handleTipSubmit} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  <input
-                    value={tipRecipient}
-                    onChange={(e) => setTipRecipient(e.target.value)}
-                    placeholder="0x… or member"
-                    required
-                    style={{
-                      flex: 1,
-                      minWidth: 130,
-                      border: "1px solid var(--line)",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      fontSize: 11,
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={tipAmount}
-                    onChange={(e) => setTipAmount(e.target.value)}
-                    required
-                    style={{
-                      width: 72,
-                      border: "1px solid var(--line)",
-                      borderRadius: 6,
-                      padding: "6px 8px",
-                      fontSize: 11,
-                    }}
-                  />
-                  <button type="submit" className="mz-primary">
-                    Send
-                  </button>
-                </form>
-              )}
+              ))}
             </div>
           )}
 
-          {activeTree === "groups" && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              {spaces.length === 0 ? (
-                <Link
-                  href="/friends"
-                  className="mz-follow"
-                  style={{ fontSize: 11 }}
-                  onClick={() => setExpanded(false)}
-                >
-                  Browse Members & Spaces
-                </Link>
-              ) : (
-                spaces.map((sp) => (
-                  <button
-                    key={sp.id}
-                    type="button"
-                    className={`mz-follow ${selectedSpace === sp.name ? "followed" : ""}`}
-                    style={{ fontSize: 11 }}
-                    onClick={() => {
-                      onSelectSpace?.(selectedSpace === sp.name ? "" : sp.name);
-                      setExpanded(false);
-                    }}
-                  >
-                    {sp.icon} {sp.name}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {onConnectWallet && (
+              <button type="button" className="mz-follow" onClick={onConnectWallet}>
+                {walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
+              </button>
+            )}
+            {onClaimReward && (
+              <button type="button" className="mz-primary" onClick={onClaimReward}>
+                Claim KASI
+              </button>
+            )}
+            {onSendTip && (
+              <button type="button" className="mz-follow" onClick={() => onSendTip(5)}>
+                Tip 5 KASI
+              </button>
+            )}
+          </div>
         </div>
       )}
+
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        style={{
+          pointerEvents: "auto",
+          padding: "5px 14px",
+          borderRadius: 999,
+          fontSize: 11,
+          fontWeight: 700,
+          background: "rgba(255, 255, 255, 0.84)",
+          backdropFilter: "blur(8px)",
+          color: "#0b0f14",
+          border: "1px solid rgba(0, 119, 73, 0.45)",
+          cursor: "pointer",
+        }}
+      >
+        {open ? "▾ Hide Taskbar" : "▴ Taskbar"}
+      </button>
     </div>
   );
 };
 
-export const MzansiBrandMark: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
-  <Link href="/" className="mz-brand" style={compact ? { fontSize: 22 } : undefined}>
-    <span aria-label="South Africa flag" role="img" style={{ fontSize: compact ? 20 : 24, lineHeight: 1 }}>
-      🇿🇦
-    </span>
-    <span className="mz-brand-mark" style={compact ? { fontSize: 28 } : undefined}>
-      ✳
-    </span>
-    <span>mzansi</span>
-  </Link>
-);
-
 export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
-  currentUser,
-  posts = [],
-  spaces = [],
-  suggestedMembers = [],
-  showFeed = true,
+  children,
   watermarkKey = "image1",
-  pageTitle = "A good day to connect.",
-  pageSubtitle = "Local community and KASI Coin on Celo.",
+  activeNav = "feed",
+  currentUser = null,
+  posts = [],
   onCreatePost,
   onToggleLike,
   onToggleSave,
   onAddComment,
+  onDeletePost,
+  onEditPost,
+  spaces = [],
+  selectedSpace = "All",
+  onSelectSpace,
+  suggestedMembers = [],
   onToggleFollow,
+  walletAddress = "",
+  claimStatus = "Ready",
+  onConnectWallet,
   onClaimReward,
-  children,
+  onSendTip,
+  showFeed = false,
+  pageTitle,
+  pageSubtitle,
 }) => {
   const router = useRouter();
-  const pathname = usePathname();
-
-  const [savedProfile, setSavedProfile] = useState<Partial<MzansiUser> | null>(null);
-  const [persistedPosts, setPersistedPosts] = useState<MzansiPost[]>([]);
-  const [localReactions, setLocalReactions] = useState<
-    Record<string, { liked?: boolean; likesDelta?: number; saved?: boolean; extraReplies?: { author: string; text: string }[] }>
-  >({});
+  const [localPosts, setLocalPosts] = useState<MzansiPost[]>(posts);
+  const [draftText, setDraftText] = useState("");
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [longPressPost, setLongPressPost] = useState<MzansiPost | null>(null);
+  const [blockedAuthors, setBlockedAuthors] = useState<string[]>([]);
+  const [toastMsg, setToastMsg] = useState("");
+  const pressTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const loadSavedProfile = () => {
-      try {
-        const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as {
-          fullName?: string;
-          handle?: string;
-          avatarUrl?: string;
-        };
-        const name = parsed.fullName?.trim();
-        const handle = parsed.handle?.trim();
-        const initials = name
-          ? name
-              .split(/\s+/)
-              .map((part) => part[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase()
-          : undefined;
-        setSavedProfile({
-          ...(name ? { name, initials } : {}),
-          ...(handle ? { handle } : {}),
-          avatarUrl: parsed.avatarUrl || "",
-        });
-      } catch {
-        // Ignore storage read errors
-      }
-    };
+    setLocalPosts(posts);
+  }, [posts]);
 
-    const loadSavedPosts = () => {
-      try {
-        const raw = window.localStorage.getItem(POSTS_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as MzansiPost[];
-        if (Array.isArray(parsed)) {
-          setPersistedPosts(parsed);
-        }
-      } catch {
-        // Ignore storage read errors
-      }
-    };
-
-    loadSavedProfile();
-    loadSavedPosts();
-    window.addEventListener("storage", loadSavedProfile);
-    window.addEventListener("storage", loadSavedPosts);
-    return () => {
-      window.removeEventListener("storage", loadSavedProfile);
-      window.removeEventListener("storage", loadSavedPosts);
-    };
-  }, [pathname]);
-
-  const resolvedUser: MzansiUser = {
-    ...currentUser,
-    ...(savedProfile ?? {}),
-    avatarUrl: currentUser.avatarUrl ?? savedProfile?.avatarUrl ?? "",
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => {
+      setToastMsg((prev) => (prev === msg ? "" : prev));
+    }, 2400);
   };
 
-  const isOwnPost = (post: MzansiPost) => {
-    if (post.isCurrentUser) return true;
-    const upperName = post.name.trim().toUpperCase();
-    const upperInitials = post.initials.trim().toUpperCase();
-    return (
-      upperName === "VK" ||
-      upperInitials === "VK" ||
-      upperName === currentUser.name.trim().toUpperCase() ||
-      upperName === resolvedUser.name.trim().toUpperCase()
-    );
+  const startLongPress = (postItem: MzansiPost) => {
+    if (pressTimerRef.current) window.clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = window.setTimeout(() => {
+      setLongPressPost(postItem);
+    }, 500);
   };
 
-  const mergedPosts = useMemo<MzansiPost[]>(() => {
-    const seenIds = new Set<string>();
-    const combined: MzansiPost[] = [];
-
-    for (const p of [...persistedPosts, ...posts]) {
-      const key = String(p.id);
-      if (seenIds.has(key)) continue;
-      seenIds.add(key);
-
-      const own = isOwnPost(p);
-      const rx = localReactions[key];
-      const baseLikes = p.likes + (rx?.likesDelta ?? 0);
-      const baseReplies = p.replies ?? [];
-      const allReplies = rx?.extraReplies?.length ? [...baseReplies, ...rx.extraReplies] : baseReplies;
-
-      combined.push({
-        ...p,
-        name: own ? resolvedUser.name : p.name,
-        initials: own ? resolvedUser.initials : p.initials,
-        color: own ? resolvedUser.avatarColor ?? p.color : p.color,
-        avatarUrl: own ? resolvedUser.avatarUrl : p.avatarUrl,
-        liked: rx?.liked !== undefined ? rx.liked : p.liked,
-        likes: Math.max(0, baseLikes),
-        saved: rx?.saved !== undefined ? rx.saved : p.saved,
-        comments: p.comments + (rx?.extraReplies?.length ?? 0),
-        replies: allReplies,
-      });
+  const cancelLongPress = () => {
+    if (pressTimerRef.current) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
     }
-
-    return combined;
-  }, [persistedPosts, posts, resolvedUser, currentUser.name, localReactions]);
-
-  const [openBranches, setOpenBranches] = useState<{
-    workspace: boolean;
-    kasiCoin: boolean;
-    corners: boolean;
-  }>({
-    workspace: true,
-    kasiCoin: true,
-    corners: true,
-  });
-
-  const [savedOnly, setSavedOnly] = useState<boolean>(false);
-  const [filter, setFilter] = useState<"all" | "following" | "latest">("all");
-  const [selectedSpace, setSelectedSpace] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [draftText, setDraftText] = useState<string>("");
-  const [draftImage, setDraftImage] = useState<string>("");
-  const [openReplyId, setOpenReplyId] = useState<string | number | null>(null);
-  const [replyText, setReplyText] = useState<string>("");
-  const [notice, setNotice] = useState<string>("");
-  const [walletAddress, setWalletAddress] = useState<string>("");
-
-  const [tipOpen, setTipOpen] = useState<boolean>(false);
-  const [tipRecipient, setTipRecipient] = useState<string>("");
-  const [tipAmount, setTipAmount] = useState<string>("10");
-  const [claimStatus, setClaimStatus] = useState<string>("Celo ready");
-
-  const showNotice = (msg: string) => {
-    setNotice(msg);
-    window.setTimeout(() => setNotice(""), 3500);
   };
 
-  const toggleBranch = (key: "workspace" | "kasiCoin" | "corners") => {
-    setOpenBranches((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const handleConnectWalletInfo = async () => {
-    const eth = (
-      window as unknown as {
-        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-      }
-    ).ethereum;
-    if (!eth?.request) {
-      showNotice("Connect MiniPay or MetaMask on Celo.");
-      return;
-    }
+  const handleSharePost = async (postItem: MzansiPost) => { const shareText = postItem.text || postItem.body || postItem.content || postItem.title || "Mzansi post";
+    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
     try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
-      if (accounts?.[0]) {
-        setWalletAddress(accounts[0]);
-        showNotice(`Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        await navigator.share({ title: "Mzansi • Freedom Chatter", text: shareText, url: shareUrl });
+        showToast("Post shared.");
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(`${shareText} ${shareUrl}`.trim());
+        showToast("Post link copied.");
+        return;
       }
     } catch {
-      showNotice("Wallet connection cancelled.");
+      // Ignore user share cancellation
     }
-  };
-
-  const handleTriggerClaim = async () => {
-    setClaimStatus("Claiming…");
-    try {
-      if (onClaimReward) {
-        await onClaimReward();
-        setClaimStatus("Claimed");
-      } else {
-        await handleConnectWalletInfo();
-        setClaimStatus("Wallet ready");
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Claim failed.";
-      setClaimStatus("Claim error");
-      showNotice(message);
-    }
-  };
-
-  const handleSendTipAmount = async (target: string, amt: number) => {
-    const eth = (
-      window as unknown as {
-        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-      }
-    ).ethereum;
-
-    if (!eth?.request) {
-      showNotice(`Tip queued: ${amt} KASI to ${target}.`);
-      return;
-    }
-
-    try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
-      const fromAddr = accounts?.[0];
-      if (fromAddr) setWalletAddress(fromAddr);
-
-      if (target.startsWith("0x") && target.length === 42 && fromAddr) {
-        const weiHex = `0x${BigInt(Math.round(amt * 1e18)).toString(16)}`;
-        const txHash = (await eth.request({
-          method: "eth_sendTransaction",
-          params: [{ from: fromAddr, to: target, value: weiHex }],
-        })) as string;
-        setClaimStatus(`Sent (${txHash.slice(0, 8)}…)`);
-        showNotice(`Sent ${amt} KASI to ${target.slice(0, 6)}…${target.slice(-4)}`);
-      } else {
-        setClaimStatus(`Tip set (${amt} KASI)`);
-        showNotice(`Tip of ${amt} KASI set for ${target}.`);
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Tip cancelled.";
-      setClaimStatus("Tip cancelled");
-      showNotice(msg);
-    }
-  };
-
-  const handleSendKasiTip = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const target = tipRecipient.trim();
-    const amt = Number(tipAmount);
-    if (!target || Number.isNaN(amt) || amt <= 0) {
-      showNotice("Enter a recipient and valid amount.");
-      return;
-    }
-    await handleSendTipAmount(target, amt);
-    setTipRecipient("");
-    setTipOpen(false);
-  };
-
-  const visiblePosts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    let list = mergedPosts.filter((p) => {
-      if (savedOnly && !p.saved) return false;
-      if (selectedSpace && p.space !== selectedSpace) return false;
-      if (filter === "following" && !p.following) return false;
-      if (!q) return true;
-      return `${p.name} ${p.text} ${p.tag ?? ""} ${p.space}`.toLowerCase().includes(q);
-    });
-    if (filter === "latest") {
-      list = [...list].sort((a, b) => Number(b.id) - Number(a.id));
-    }
-    return list;
-  }, [mergedPosts, savedOnly, selectedSpace, filter, searchQuery]);
-
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      showNotice("Choose an image file.");
-      return;
-    }
-    try {
-      const resized = await resizePostImageFile(file, 960, 720, 0.8);
-      setDraftImage(resized);
-      showNotice("Photo attached.");
-    } catch {
-      showNotice("Could not process photo.");
-    }
-    e.target.value = "";
+    showToast("Ready to share.");
   };
 
   const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = draftText.trim();
-    if (!trimmed) return;
+    const text = draftText.trim();
+    if (!text) return;
 
-    const spaceName = selectedSpace || spaces[0]?.name || "Community";
-    const newPost: MzansiPost = {
-      id: Date.now(),
-      name: resolvedUser.name,
-      initials: resolvedUser.initials,
-      color: resolvedUser.avatarColor ?? "green",
-      avatarUrl: resolvedUser.avatarUrl,
-      time: "Just now",
-      space: spaceName,
-      following: true,
-      text: trimmed,
-      likes: 0,
-      liked: false,
-      saved: false,
-      comments: 0,
-      replies: [],
-      image: draftImage || undefined,
-      isCurrentUser: true,
-    };
-
-    const nextSavedPosts = [newPost, ...persistedPosts];
-    setPersistedPosts(nextSavedPosts);
-    try {
-      window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextSavedPosts));
-    } catch {
-      const withoutImage = [{ ...newPost, image: undefined }, ...persistedPosts];
-      setPersistedPosts(withoutImage);
-      try {
-        window.localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(withoutImage));
-      } catch {
-        // Ignore storage error
-      }
+    if (editingPostId) {
+      setLocalPosts((prev) =>
+        prev.map((p) => (p.id === editingPostId ? { ...p, body: text, content: text } : p))
+      );
+      if (onEditPost) await onEditPost(editingPostId, text);
+      setEditingPostId(null);
+      setDraftText("");
+      showToast("Post updated.");
+      return;
     }
 
-    if (onCreatePost) {
-      try {
-        await onCreatePost({
-          text: trimmed,
-          space: spaceName,
-          image: draftImage || undefined,
-        });
-      } catch {
-        // Post remains saved locally even if remote API fails
-      }
+    if (onCreatePost) { await onCreatePost({ body: text, text, space: selectedSpace === "All" ? undefined : selectedSpace }); } else {
+      const authorName =
+        currentUser?.fullName || currentUser?.displayName || currentUser?.name || "Mzansi Member";
+      setLocalPosts((prev) => [
+        {
+          id: `local-${Date.now()}`,
+          author: authorName,
+          handle: currentUser?.handle || "@mzansi",
+          body: text,
+          createdAt: "Just now",
+          likes: 0,
+          comments: [],
+        },
+        ...prev,
+      ]);
     }
-
     setDraftText("");
-    setDraftImage("");
-    showNotice("Post published.");
+    showToast("Post published.");
   };
 
-  const handleLikeClick = async (post: MzansiPost) => {
-    const key = String(post.id);
-    const nextLiked = !post.liked;
-    setLocalReactions((prev) => {
-      const cur = prev[key] ?? {};
-      const delta = (cur.likesDelta ?? 0) + (nextLiked ? 1 : -1);
-      return { ...prev, [key]: { ...cur, liked: nextLiked, likesDelta: delta } };
-    });
-    if (onToggleLike) {
-      await onToggleLike(post.id);
-    }
+  const handleLike = async (postId: string | number) => {
+    setLocalPosts((prev) =>
+      prev.map((p) => {
+        if (p.id !== postId) return p;
+        const nextLiked = !p.liked;
+        const nextLikes = Math.max(0, (p.likes || 0) + (nextLiked ? 1 : -1));
+        return { ...p, liked: nextLiked, likes: nextLikes };
+      })
+    );
+    if (onToggleLike) await onToggleLike(postId);
   };
 
-  const handleSaveClick = async (post: MzansiPost) => {
-    const key = String(post.id);
-    const nextSaved = !post.saved;
-    setLocalReactions((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] ?? {}), saved: nextSaved },
-    }));
-    if (onToggleSave) {
-      await onToggleSave(post.id);
-    }
+  const handleSave = async (postId: string | number) => {
+    setLocalPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, saved: !p.saved } : p)));
+    if (onToggleSave) await onToggleSave(postId);
+    showToast("Saved status updated.");
   };
 
-  const todayLabel = new Date()
-    .toLocaleDateString("en-ZA", { weekday: "long", month: "long", day: "numeric" })
-    .toUpperCase();
+  const handleDelete = async (postId: string | number) => {
+    setLocalPosts((prev) => prev.filter((p) => p.id !== postId));
+    if (onDeletePost) await onDeletePost(postId);
+    showToast("Post deleted.");
+  };
+
+  const handleBlockAuthor = (postItem: MzansiPost) => {
+    const key = String(postItem.authorId || postItem.author || "");
+    if (!key) return;
+    setBlockedAuthors((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    setLocalPosts((prev) => prev.filter((p) => String(p.authorId || p.author || "") !== key));
+    showToast(`Blocked ${postItem.author || "member"}.`);
+  };
+
+  const handleCommentSubmit = async (postId: string | number, e: React.FormEvent) => {
+    e.preventDefault();
+    const text = (commentDrafts[String(postId)] || "").trim();
+    if (!text) return;
+    const authorName = currentUser?.fullName || currentUser?.name || "Member";
+    setLocalPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? {
+              ...p,
+              comments: Array.isArray(p.comments) ? [...p.comments, { id: `c-${Date.now()}`, author: authorName, text }] : p.comments,
+            }
+          : p
+      )
+    );
+    setCommentDrafts((prev) => ({ ...prev, [String(postId)]: "" }));
+    if (onAddComment) await onAddComment(postId, text);
+  };
+
+  const visiblePosts = localPosts.filter((p) => {
+    const authorKey = String(p.authorId || p.author || "");
+    if (authorKey && blockedAuthors.includes(authorKey)) return false;
+    if (selectedSpace && selectedSpace !== "All" && p.space && p.space !== selectedSpace) return false;
+    return true;
+  });
+
+  const navItems = [
+    { key: "feed", label: "Feed", href: "/dashboard" },
+    { key: "friends", label: "Friends", href: "/friends" },
+    { key: "messages", label: "Messages", href: "/messages" },
+    { key: "profile", label: "Profile", href: "/profile" },
+  ];
 
   return (
-    <div className="mz-common-app" style={{ position: "relative", paddingBottom: 68, background: "transparent" }}>
+    <div
+      className="mz-common-app"
+      style={{
+        gridTemplateColumns: "1fr",
+        position: "relative",
+        minHeight: "100vh",
+        paddingBottom: 96,
+        background: "transparent",
+      }}
+    >
       <WatermarkBackdrop imageKey={watermarkKey} />
 
-      <aside className="mz-sidebar" aria-label="Main navigation" style={{ position: "relative", zIndex: 1 }}>
-        <MzansiBrandMark />
-        <p className="mz-tagline">KASI Coin · Celo</p>
+      <div
+        className="mz-content"
+        style={{
+          maxWidth: 960,
+          width: "100%",
+          margin: "0 auto",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div className="mz-flag-strip" />
+        <header
+          className="mz-topbar"
+          style={{
+            background: "rgba(255, 255, 255, 0.72)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <MzansiBrandMark compact />
 
-        <div style={{ display: "grid", gap: 14 }}>
-          <div>
-            <button
-              type="button"
-              className="mz-label"
-              style={{
-                background: "none",
-                border: 0,
-                padding: "4px 6px",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-              onClick={() => toggleBranch("workspace")}
-              aria-expanded={openBranches.workspace}
-            >
-              <span>Workspace</span>
-              <span>{openBranches.workspace ? "▾" : "▸"}</span>
-            </button>
+          <nav aria-label="Primary sections" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {navItems.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={activeNav === item.key ? "mz-primary" : "mz-follow"}
+                style={{ fontSize: 12, padding: "6px 12px" }}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
-            {openBranches.workspace && (
-              <nav className="mz-nav" style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)" }}>
-                <button
-                  type="button"
-                  className={pathname === "/dashboard" && !savedOnly ? "active" : ""}
-                  onClick={() => {
-                    setSavedOnly(false);
-                    setSelectedSpace("");
-                    router.push("/dashboard");
-                  }}
-                >
-                  Feed
-                </button>
-                <button
-                  type="button"
-                  className={pathname === "/friends" ? "active" : ""}
-                  onClick={() => router.push("/friends")}
-                >
-                  Friends & Members
-                </button>
-                <button
-                  type="button"
-                  className={pathname === "/messages" ? "active" : ""}
-                  onClick={() => router.push("/messages")}
-                >
-                  Messages
-                </button>
-                <button
-                  type="button"
-                  className={savedOnly ? "active" : ""}
-                  onClick={() => {
-                    setSavedOnly((prev) => !prev);
-                    if (pathname !== "/dashboard") router.push("/dashboard");
-                  }}
-                >
-                  Saved
-                </button>
-                <button
-                  type="button"
-                  className={pathname === "/profile" ? "active" : ""}
-                  onClick={() => router.push("/profile")}
-                >
-                  Profile
-                </button>
-              </nav>
-            )}
-          </div>
-
-          <div>
-            <button
-              type="button"
-              className="mz-label"
-              style={{
-                background: "none",
-                border: 0,
-                padding: "4px 6px",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-                color: "var(--green)",
-              }}
-              onClick={() => toggleBranch("kasiCoin")}
-              aria-expanded={openBranches.kasiCoin}
-            >
-              <span>KASI Coin</span>
-              <span>{openBranches.kasiCoin ? "▾" : "▸"}</span>
-            </button>
-
-            {openBranches.kasiCoin && (
-              <div style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)", display: "grid", gap: 6 }}>
-                <button
-                  type="button"
-                  className="mz-action"
-                  style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
-                  onClick={handleConnectWalletInfo}
-                >
-                  Wallet {walletAddress ? `(${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)})` : "· Connect"}
-                </button>
-                <button
-                  type="button"
-                  className="mz-action"
-                  style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
-                  onClick={handleTriggerClaim}
-                >
-                  Claim Rewards
-                </button>
-                <button
-                  type="button"
-                  className="mz-action"
-                  style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
-                  onClick={() => setTipOpen((prev) => !prev)}
-                >
-                  Send KASI Tip {tipOpen ? "▴" : "▾"}
-                </button>
-
-                {tipOpen && (
-                  <form
-                    onSubmit={handleSendKasiTip}
-                    style={{
-                      display: "grid",
-                      gap: 6,
-                      padding: "8px",
-                      borderRadius: 6,
-                      border: "1px solid var(--line)",
-                      background: "var(--bg)",
-                    }}
-                  >
-                    <input
-                      value={tipRecipient}
-                      onChange={(e) => setTipRecipient(e.target.value)}
-                      placeholder="0x… or member"
-                      required
-                      style={{
-                        border: "1px solid var(--line)",
-                        borderRadius: 5,
-                        padding: "5px 7px",
-                        fontSize: 11,
-                        background: "var(--white)",
-                      }}
-                    />
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={tipAmount}
-                        onChange={(e) => setTipAmount(e.target.value)}
-                        required
-                        style={{
-                          width: 68,
-                          border: "1px solid var(--line)",
-                          borderRadius: 5,
-                          padding: "5px 7px",
-                          fontSize: 11,
-                          background: "var(--white)",
-                        }}
-                      />
-                      <button type="submit" className="mz-primary" style={{ padding: "5px 9px", fontSize: 11, flex: 1 }}>
-                        Send
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                <div className="mz-tiny mz-muted" style={{ padding: "2px 8px" }}>
-                  Status: {claimStatus}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {spaces.length > 0 && (
-            <div>
+          <div className="mz-top-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {currentUser ? (
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#007749" }}>
+                {currentUser.fullName || currentUser.name || currentUser.handle || "Member"}
+              </span>
+            ) : (
               <button
                 type="button"
-                className="mz-label"
-                style={{
-                  background: "none",
-                  border: 0,
-                  padding: "4px 6px",
-                  width: "100%",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                }}
-                onClick={() => toggleBranch("corners")}
-                aria-expanded={openBranches.corners}
+                className="mz-follow"
+                style={{ fontSize: 12 }}
+                onClick={() => router.push("/login")}
               >
-                <span>Groups & Pages</span>
-                <span>{openBranches.corners ? "▾" : "▸"}</span>
+                Log in
               </button>
-
-              {openBranches.corners && (
-                <div style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)", display: "grid", gap: 6 }}>
-                  {spaces.map((sp) => (
-                    <a
-                      key={sp.id}
-                      href={`#space-${sp.id}`}
-                      className={`mz-space-link ${selectedSpace === sp.name ? "active" : ""}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setSelectedSpace((prev) => (prev === sp.name ? "" : sp.name));
-                      }}
-                    >
-                      <span
-                        className="mz-space-icon"
-                        style={sp.badgeBg ? { background: sp.badgeBg } : undefined}
-                      >
-                        {sp.icon}
-                      </span>
-                      {sp.name}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <Link href="/profile" className="mz-profile">
-          <UserAvatarBadge
-            name={resolvedUser.name}
-            initials={resolvedUser.initials}
-            avatarColor={resolvedUser.avatarColor}
-            avatarUrl={resolvedUser.avatarUrl}
-          />
-          <div>
-            <strong>{resolvedUser.name}</strong>
-            <div className="mz-tiny mz-muted">{resolvedUser.handle}</div>
-          </div>
-        </Link>
-      </aside>
-
-      <div className="mz-content" style={{ position: "relative", zIndex: 1 }}>
-        <header className="mz-topbar">
-          <div className="mz-breadcrumb">
-            Mzansi <span>/ {selectedSpace || (savedOnly ? "SAVED" : pathname.replace("/", "").toUpperCase() || "HOME")}</span>
-          </div>
-          <div className="mz-top-actions">
-            {showFeed && (
-              <label className="mz-search">
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search…"
-                />
-              </label>
             )}
-            <Link href="/profile" aria-label="Your profile" style={{ display: "inline-flex" }}>
-              <UserAvatarBadge
-                name={resolvedUser.name}
-                initials={resolvedUser.initials}
-                avatarColor={resolvedUser.avatarColor}
-                avatarUrl={resolvedUser.avatarUrl}
-                small
-              />
-            </Link>
           </div>
         </header>
 
-        {notice && (
-          <div role="status" style={{ padding: "8px 20px", fontSize: 12, color: "var(--green)", fontWeight: 600 }}>
-            {notice}
-          </div>
-        )}
-
-        <main className="mz-workspace" style={!showFeed ? { gridTemplateColumns: "1fr" } : undefined}>
-          <section className="mz-feed">
-            <div className="mz-greeting">
-              <div>
-                <div className="mz-label">{todayLabel}</div>
-                {(() => {
-                  const isDashboardGreeting =
-                    pathname === "/dashboard" &&
-                    (!pageTitle || pageTitle.trim().toLowerCase().startsWith("a good day to connect"));
-                  const displayTitle = isDashboardGreeting ? "People Shall Govern - Freedom Chatter" : pageTitle;
-                  const useCompactSize = pageTitle === "Your profile" || isDashboardGreeting;
-                  return (
-                    <h1
-                  style={
-                    pathname === "/dashboard" || pageTitle === "Your profile"
-                      ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 }
-                      : undefined
-                  }
-                >
-                  {pathname === "/dashboard" ? "People Shall Govern - Freedom Chatter" : pageTitle}
-                </h1>
-                  );
-                })()}
-                <p className="mz-muted mz-tiny">{pageSubtitle}</p>
-              </div>
-              <span style={{ fontSize: 24, color: "var(--orange)" }} aria-hidden="true">
-                ☼
-              </span>
+        <main style={{ padding: "24px 16px 48px", display: "grid", gap: 16 }}>
+          {toastMsg && (
+            <div
+              role="status"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 10,
+                background: "rgba(255, 255, 255, 0.86)",
+                border: "1px solid #007749",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#005c38",
+              }}
+            >
+              {toastMsg}
             </div>
+          )}
 
-            {children}
+          {(pageTitle || pageSubtitle) && (
+            <section className="mz-banner" style={{ padding: "18px 20px", borderRadius: 14 }}>
+              {pageTitle && <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{pageTitle}</h1>}
+              {pageSubtitle && (
+                <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(11, 15, 20, 0.78)" }}>{pageSubtitle}</p>
+              )}
+            </section>
+          )}
 
-            {showFeed && (
-              <>
-                <form className="mz-composer" onSubmit={handlePostSubmit}>
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <UserAvatarBadge
-                      name={resolvedUser.name}
-                      initials={resolvedUser.initials}
-                      avatarColor={resolvedUser.avatarColor}
-                      avatarUrl={resolvedUser.avatarUrl}
-                    />
-                    <textarea
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      placeholder={`What is on your mind, ${resolvedUser.name.split(" ")[0]}?`}
-                      maxLength={2000}
-                      required
-                    />
-                  </div>
-                  {draftImage && (
-                    <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
-                      <img
-                        src={draftImage}
-                        alt="Preview"
-                        style={{ maxHeight: 180, borderRadius: 8, objectFit: "cover" }}
-                      />
+          {showFeed && (
+            <>
+              <form
+                onSubmit={handlePostSubmit}
+                className="mz-composer"
+                style={{ padding: 14, borderRadius: 14, display: "grid", gap: 10 }}
+              >
+                <textarea
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  placeholder={editingPostId ? "Edit your post..." : "Share something with Mzansi..."}
+                  rows={3}
+                  className="mz-transparent-input"
+                  style={{ width: "100%", borderRadius: 10, padding: 10, fontSize: 13, resize: "vertical" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(11, 15, 20, 0.72)" }}>
+                    Touch and hold any post on mobile for tree options
+                  </span>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {editingPostId && (
                       <button
                         type="button"
                         className="mz-follow"
-                        style={{ fontSize: 11 }}
-                        onClick={() => setDraftImage("")}
+                        onClick={() => {
+                          setEditingPostId(null);
+                          setDraftText("");
+                        }}
                       >
-                        Remove photo
+                        Cancel
                       </button>
-                    </div>
-                  )}
-                  <div className="mz-composer-bottom">
-                    <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                      <label className="mz-action">
-                        Photo
-                        <input type="file" accept="image/*" hidden onChange={handleImageChange} />
-                      </label>
-                      <button
-                        type="button"
-                        className="mz-action"
-                        onClick={() => setDraftText((t) => `${t} 🇿🇦`)}
-                      >
-                        Add 🇿🇦
-                      </button>
-                    </div>
-                    <button className="mz-primary" type="submit">
-                      Post →
+                    )}
+                    <button type="submit" className="mz-primary">
+                      {editingPostId ? "Save Edit" : "Post"}
                     </button>
                   </div>
-                </form>
+                </div>
+              </form>
 
-                {/* Option 2 Quick Filter Strip + Space Chips */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginBottom: 12,
-                  }}
-                >
-                  <div className="mz-tabs" role="tablist" aria-label="Feed filter" style={{ marginBottom: 0 }}>
-                    <button
-                      type="button"
-                      className={!savedOnly && filter === "all" ? "active" : ""}
-                      onClick={() => {
-                        setSavedOnly(false);
-                        setFilter("all");
+              <div style={{ display: "grid", gap: 12 }}>
+                {visiblePosts.map((post) => {
+                  const postBody = post.text || post.body || post.content || "";
+                  return (
+                    <article
+                      key={post.id}
+                      className="mz-post"
+                      style={{ padding: 16, borderRadius: 14, display: "grid", gap: 10 }}
+                      onTouchStart={() => startLongPress(post)}
+                      onTouchEnd={cancelLongPress}
+                      onTouchMove={cancelLongPress}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setLongPressPost(post);
                       }}
                     >
-                      For you
-                    </button>
-                    <button
-                      type="button"
-                      className={!savedOnly && filter === "following" ? "active" : ""}
-                      onClick={() => {
-                        setSavedOnly(false);
-                        setFilter("following");
-                      }}
-                    >
-                      Following
-                    </button>
-                    <button
-                      type="button"
-                      className={!savedOnly && filter === "latest" ? "active" : ""}
-                      onClick={() => {
-                        setSavedOnly(false);
-                        setFilter("latest");
-                      }}
-                    >
-                      Latest
-                    </button>
-                    <button
-                      type="button"
-                      className={savedOnly ? "active" : ""}
-                      onClick={() => setSavedOnly((prev) => !prev)}
-                    >
-                      Saved
-                    </button>
-                  </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                        <div>
+                          <strong style={{ fontSize: 13 }}>{post.author || "Mzansi Member"}</strong>
+                          {post.handle && (
+                            <span style={{ marginLeft: 6, fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>
+                              {post.handle}
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>{post.createdAt || ""}</span>
+                      </div>
 
-                  {spaces.length > 0 && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {spaces.map((sp) => (
-                        <button
-                          key={sp.id}
-                          type="button"
-                          className={`mz-follow ${selectedSpace === sp.name ? "followed" : ""}`}
-                          style={{ fontSize: 11 }}
-                          onClick={() => setSelectedSpace((prev) => (prev === sp.name ? "" : sp.name))}
-                        >
-                          {sp.icon} {sp.name}
+                      {post.title && <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{post.title}</h2>}
+                      {postBody && <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5 }}>{postBody}</p>}
+
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingTop: 4 }}>
+                        <button type="button" className="mz-follow" onClick={() => void handleLike(post.id)}>
+                          {post.liked ? "♥ Liked" : "♡ Like"} ({post.likes || 0})
                         </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        <button type="button" className="mz-follow" onClick={() => void handleSave(post.id)}>
+                          {post.saved ? "★ Saved" : "☆ Save"}
+                        </button>
+                        <button type="button" className="mz-follow" onClick={() => void handleSharePost(post)}>
+                          ↗ Share
+                        </button>
+                        <button type="button" className="mz-follow" onClick={() => setLongPressPost(post)}>
+                          ••• Tree Menu
+                        </button>
+                      </div>
 
-                <div>
-                  {visiblePosts.length === 0 ? (
-                    <div className="mz-post mz-muted" style={{ textAlign: "center" }}>
-                      No posts yet.
-                    </div>
-                  ) : (
-                    visiblePosts.map((post) => (
-                      <article key={post.id} className="mz-post">
-                        <div className="mz-post-head">
-                          <UserAvatarBadge
-                            name={post.name}
-                            initials={post.initials}
-                            avatarColor={post.color}
-                            avatarUrl={post.avatarUrl}
-                          />
-                          <div>
-                            <strong style={{ fontSize: 12 }}>{post.name}</strong>
-                            <div className="mz-tiny mz-muted">
-                              {post.time} · {post.space}
+                      <form
+                        onSubmit={(e) => void handleCommentSubmit(post.id, e)}
+                        style={{ display: "flex", gap: 8 }}
+                      >
+                        <input
+                          type="text"
+                          value={commentDrafts[String(post.id)] || ""}
+                          onChange={(e) =>
+                            setCommentDrafts((prev) => ({ ...prev, [String(post.id)]: e.target.value }))
+                          }
+                          placeholder="Write a reply..."
+                          className="mz-transparent-input"
+                          style={{ flex: 1, borderRadius: 8, padding: "6px 10px", fontSize: 12 }}
+                        />
+                        <button type="submit" className="mz-follow">
+                          Reply
+                        </button>
+                      </form>
+
+                      {Array.isArray(post.comments) && post.comments.length > 0 && (
+                        <div style={{ display: "grid", gap: 4, paddingLeft: 10, borderLeft: "2px solid #007749" }}>
+                          {post.comments.map((c, idx) => (
+                            <div key={c.id || idx} style={{ fontSize: 12 }}>
+                              <strong>{c.author || "Member"}: </strong>
+                              <span>{c.text}</span>
                             </div>
-                          </div>
+                          ))}
                         </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
-                        <p className="mz-post-text">
-                          {post.text}
-                          {post.tag && <span className="mz-hashtag">{post.tag}</span>}
-                        </p>
-
-                        {post.image && (
-                          <img
-                            src={post.image}
-                            alt={`Shared by ${post.name}`}
-                            style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 8 }}
-                          />
-                        )}
-
-                        <div className="mz-post-footer">
-                          <button
-                            type="button"
-                            className={`mz-action ${post.liked ? "active" : ""}`}
-                            onClick={() => handleLikeClick(post)}
-                          >
-                            ♥ {post.likes}
-                          </button>
-                          <button
-                            type="button"
-                            className="mz-action"
-                            onClick={() => {
-                              setOpenReplyId((prev) => (prev === post.id ? null : post.id));
-                              setReplyText("");
-                            }}
-                          >
-                            💬 {post.comments}
-                          </button>
-                          <button
-                            type="button"
-                            className={`mz-action mz-save ${post.saved ? "active" : ""}`}
-                            onClick={() => handleSaveClick(post)}
-                          >
-                            {post.saved ? "Saved" : "Save"}
-                          </button>
-                        </div>
-
-                        {openReplyId === post.id && (
-                          <form
-                            style={{ display: "flex", gap: 8, marginTop: 12 }}
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              const trimmed = replyText.trim();
-                              if (!trimmed) return;
-                              const key = String(post.id);
-                              setLocalReactions((prev) => {
-                                const cur = prev[key] ?? {};
-                                const nextReplies = [
-                                  ...(cur.extraReplies ?? []),
-                                  { author: resolvedUser.name, text: trimmed },
-                                ];
-                                return { ...prev, [key]: { ...cur, extraReplies: nextReplies } };
-                              });
-                              if (onAddComment) {
-                                await onAddComment(post.id, trimmed);
-                              }
-                              setReplyText("");
-                              setOpenReplyId(null);
-                            }}
-                          >
-                            <input
-                              value={replyText}
-                              onChange={(e) => setReplyText(e.target.value)}
-                              placeholder="Write a reply…"
-                              maxLength={500}
-                              required
-                              style={{
-                                flex: 1,
-                                border: "1px solid var(--line)",
-                                borderRadius: 6,
-                                padding: "8px 10px",
-                              }}
-                            />
-                            <button type="submit" className="mz-primary">
-                              Reply
-                            </button>
-                          </form>
-                        )}
-
-                        {post.replies && post.replies.length > 0 && (
-                          <div style={{ marginTop: 10 }}>
-                            {post.replies.map((r, idx) => (
-                              <div
-                                key={idx}
-                                className="mz-tiny"
-                                style={{ paddingTop: 8, marginTop: 8, borderTop: "1px solid var(--line)" }}
-                              >
-                                <strong>{r.author}</strong> · {r.text}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </article>
-                    ))
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-
-          {showFeed && (
-            <aside className="mz-rail" aria-label="KASI wallet and community">
-              <section
-                className="mz-rail-section"
-                style={{
-                  background: "var(--white)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 10,
-                  padding: 12,
-                  marginBottom: 12,
-                }}
-              >
-                <div className="mz-label" style={{ color: "var(--green)", marginBottom: 4 }}>
-                  KASI Coin · Celo
-                </div>
-                <div className="mz-tiny mz-muted" style={{ marginBottom: 10 }}>
-                  Status: {claimStatus}
-                </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button type="button" className="mz-primary" onClick={handleTriggerClaim}>
-                    Claim KASI
-                  </button>
+          {suggestedMembers.length > 0 && onToggleFollow && (
+            <section className="mz-glass-card" style={{ padding: 14, borderRadius: 14, display: "grid", gap: 8 }}>
+              <div className="mz-label" style={{ color: "#007749" }}>
+                Suggested Members
+              </div>
+              {suggestedMembers.map((member) => (
+                <div
+                  key={member.id}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}
+                >
+                  <div>
+                    <strong style={{ fontSize: 12 }}>{member.name}</strong>
+                    {member.role && (
+                      <div style={{ fontSize: 11, color: "rgba(11, 15, 20, 0.68)" }}>{member.role}</div>
+                    )}
+                  </div>
                   <button
                     type="button"
-                    className="mz-follow"
-                    style={{ fontSize: 11 }}
-                    onClick={handleConnectWalletInfo}
+                    className={member.following ? "mz-follow followed" : "mz-follow"}
+                    onClick={() => onToggleFollow(member.id)}
                   >
-                    {walletAddress ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
+                    {member.following ? "Following" : "Follow"}
                   </button>
                 </div>
-              </section>
-
-              {suggestedMembers.length > 0 && onToggleFollow && (
-                <section className="mz-rail-section">
-                  <div className="mz-rail-heading">
-                    <h2>Members</h2>
-                  </div>
-                  {suggestedMembers.map((member) => (
-                    <div key={member.id} className="mz-person">
-                      <div className={`mz-avatar small ${member.color ?? ""}`}>{member.initials}</div>
-                      <div>
-                        <strong style={{ fontSize: 11 }}>{member.name}</strong>
-                        <div className="mz-tiny mz-muted">{member.role}</div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`mz-follow ${member.following ? "followed" : ""}`}
-                        onClick={() => onToggleFollow(member.id)}
-                      >
-                        {member.following ? "Following" : "Follow"}
-                      </button>
-                    </div>
-                  ))}
-                </section>
-              )}
-            </aside>
+              ))}
+            </section>
           )}
+
+          {children}
         </main>
       </div>
+
+      {longPressPost && (
+        <div
+          role="dialog"
+          aria-label="Post tree options"
+          onClick={() => setLongPressPost(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 80,
+            background: "rgba(0, 0, 0, 0.45)",
+            backdropFilter: "blur(4px)",
+            display: "grid",
+            placeItems: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              borderRadius: 14,
+              padding: 16,
+              background: "rgba(255, 255, 255, 0.94)",
+              border: "1px solid #007749",
+              boxShadow: "0 14px 36px rgba(0, 0, 0, 0.24)",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span className="mz-label" style={{ color: "#007749" }}>
+                🌳 Post Options Tree
+              </span>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ padding: "2px 8px", fontSize: 11 }}
+                onClick={() => setLongPressPost(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gap: 6, paddingLeft: 10, borderLeft: "2px solid #007749" }}>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ justifyContent: "flex-start" }}
+                onClick={() => {
+                  void handleSharePost(longPressPost);
+                  setLongPressPost(null);
+                }}
+              >
+                ├─ ↗ Share Post
+              </button>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ justifyContent: "flex-start" }}
+                onClick={() => {
+                  void handleSave(longPressPost.id);
+                  setLongPressPost(null);
+                }}
+              >
+                ├─ ★ Save Post
+              </button>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ justifyContent: "flex-start" }}
+                onClick={() => {
+                  setEditingPostId(String(longPressPost.id));
+                  setDraftText(longPressPost.text || longPressPost.body || longPressPost.content || "");
+                  setLongPressPost(null);
+                }}
+              >
+                ├─ ✎ Edit Post
+              </button>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ justifyContent: "flex-start", color: "#991b1b" }}
+                onClick={() => {
+                  void handleDelete(longPressPost.id);
+                  setLongPressPost(null);
+                }}
+              >
+                ├─ 🗑 Delete Post
+              </button>
+              <button
+                type="button"
+                className="mz-follow"
+                style={{ justifyContent: "flex-start", color: "#991b1b" }}
+                onClick={() => {
+                  handleBlockAuthor(longPressPost);
+                  setLongPressPost(null);
+                }}
+              >
+                └─ 🚫 Block Member
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SwipeUpTaskbar
         spaces={spaces}
         selectedSpace={selectedSpace}
-        onSelectSpace={(sp) => setSelectedSpace(sp)}
-        onConnectWallet={handleConnectWalletInfo}
-        onClaimReward={handleTriggerClaim}
-        onSendTip={handleSendTipAmount}
+        onSelectSpace={onSelectSpace}
+        onConnectWallet={onConnectWallet}
+        onClaimReward={onClaimReward}
+        onSendTip={onSendTip}
         walletAddress={walletAddress}
         claimStatus={claimStatus}
       />
+
+      <div className="mz-flag-marquee" role="region" aria-label="Community Banner">
+        <div className="mz-flag-marquee-track">
+          <span>🇿🇦 Freedom Chatter • People Shall Govern</span>
+          <span>★ Together We Can Do It • Mzansi Community Network</span>
+          <span>🇿🇦 Freedom Chatter • People Shall Govern</span>
+        </div>
+      </div>
     </div>
   );
 };

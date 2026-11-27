@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   CommonUpgrade,
   type MzansiPost,
@@ -15,6 +16,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 interface ApiUser {
   id: string | number;
   name?: string;
+  fullName?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -26,7 +28,7 @@ interface ApiComment {
   id?: string | number;
   content?: string;
   text?: string;
-  author?: ApiUser;
+  author?: ApiUser | string;
   user?: ApiUser;
 }
 
@@ -34,6 +36,7 @@ interface ApiPost {
   id: string | number;
   content?: string;
   text?: string;
+  body?: string;
   imageUrl?: string;
   image?: string;
   createdAt?: string;
@@ -45,9 +48,9 @@ interface ApiPost {
   savedByMe?: boolean;
   saved?: boolean;
   followingAuthor?: boolean;
-  author?: ApiUser;
+  author?: ApiUser | string;
   user?: ApiUser;
-  comments?: ApiComment[];
+  comments?: ApiComment[] | number;
 }
 
 interface ApiGroupOrPage {
@@ -57,8 +60,10 @@ interface ApiGroupOrPage {
   kind?: "group" | "page";
 }
 
-function formatName(u?: ApiUser): string {
+function formatName(u?: ApiUser | string): string {
   if (!u) return "Mzansi Member";
+  if (typeof u === "string") return u.trim() || "Mzansi Member";
+  if (u.fullName && u.fullName.trim()) return u.fullName.trim();
   if (u.name && u.name.trim()) return u.name.trim();
   const full = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
   if (full) return full;
@@ -109,12 +114,13 @@ export default function DashboardPage() {
     return {
       id: p.id ?? idx + 1,
       name,
+      author: name,
       initials: getInitials(name),
       color: colors[idx % colors.length],
       time: p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-ZA") : "Recently",
       space: String(p.space || "Community"),
       following: Boolean(p.followingAuthor),
-      text: String(p.content ?? p.text ?? ""),
+      text: String(p.content ?? p.text ?? p.body ?? ""),
       likes: Number(p.likesCount ?? p.likes ?? 0),
       liked: Boolean(p.likedByMe ?? p.liked),
       saved: Boolean(p.savedByMe ?? p.saved),
@@ -137,7 +143,9 @@ export default function DashboardPage() {
           ...prev,
           id: String(me.id ?? "me"),
           name,
-          handle: me.handle ? `@${me.handle.replace(/^@/, "")}` : `@${name.toLowerCase().replace(/[^a-z0-9]/g, "") || "member"}`,
+          handle: me.handle
+            ? `@${me.handle.replace(/^@/, "")}`
+            : `@${name.toLowerCase().replace(/[^a-z0-9]/g, "") || "member"}`,
           initials: getInitials(name),
         }));
       })
@@ -147,7 +155,7 @@ export default function DashboardPage() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data: ApiPost[] | { items?: ApiPost[]; data?: ApiPost[] }) => {
         const list = Array.isArray(data) ? data : data.items ?? data.data ?? [];
-        setPosts(list.map(mapPost));
+        setPosts(list.map((item, idx) => mapPost(item, idx)));
       })
       .catch(() => {});
 
@@ -173,8 +181,12 @@ export default function DashboardPage() {
       .catch(() => {});
 
     Promise.all([
-      fetch(`${API_URL}/groups`, { headers }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
-      fetch(`${API_URL}/pages`, { headers }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch(`${API_URL}/groups`, { headers })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
+      fetch(`${API_URL}/pages`, { headers })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
     ]).then(([groupsRes, pagesRes]) => {
       const groups = Array.isArray(groupsRes) ? groupsRes : groupsRes?.items ?? groupsRes?.data ?? [];
       const pages = Array.isArray(pagesRes) ? pagesRes : pagesRes?.items ?? pagesRes?.data ?? [];
@@ -196,21 +208,57 @@ export default function DashboardPage() {
     });
   }, []);
 
-  const handleCreatePost = async (payload: { text: string; space: string; image?: string }) => {
+  const handleCreatePost = async (payload: {
+    title?: string;
+    body?: string;
+    text?: string;
+    space?: string;
+    image?: string;
+    imageUrl?: string;
+  }) => {
+    const cleanText = String(payload.text ?? payload.body ?? payload.title ?? "").trim();
+    const cleanSpace = String(payload.space ?? "Community");
+    const cleanImage = payload.image ?? payload.imageUrl;
+    if (!cleanText) return;
+
+    const fallbackAuthor =
+      (currentUser as { fullName?: string; name?: string }).fullName ||
+      currentUser.name ||
+      "Mzansi Member";
+
     if (API_URL) {
       try {
         const res = await fetch(`${API_URL}/posts`, {
           method: "POST",
           headers: getHeaders(),
           body: JSON.stringify({
-            content: payload.text,
-            space: payload.space,
-            imageUrl: payload.image,
+            content: cleanText,
+            text: cleanText,
+            space: cleanSpace,
+            imageUrl: cleanImage,
           }),
         });
         if (res.ok) {
           const created: ApiPost = await res.json();
-          setPosts((prev) => [mapPost({ ...created, author: created.author ?? currentUser }, 0), ...prev]);
+          const authorLabel =
+            typeof created?.author === "string"
+              ? created.author
+              : created?.author?.name ||
+                created?.author?.fullName ||
+                fallbackAuthor;
+
+          setPosts((prev) => [
+            mapPost(
+              {
+                ...created,
+                author: authorLabel,
+                text: created?.text ?? created?.body ?? created?.content ?? cleanText,
+                image: created?.image ?? created?.imageUrl ?? cleanImage,
+              },
+              0
+            ),
+            ...prev,
+          ]);
           return;
         }
       } catch {
@@ -220,20 +268,22 @@ export default function DashboardPage() {
 
     setPosts((prev) => [
       {
-        id: Date.now(),
-        name: currentUser.name,
-        initials: currentUser.initials,
+        id: String(Date.now()),
+        name: fallbackAuthor,
+        author: fallbackAuthor,
+        initials: currentUser.initials || getInitials(fallbackAuthor),
         color: currentUser.avatarColor,
         time: "Just now",
-        space: payload.space,
+        space: cleanSpace,
         following: true,
-        text: payload.text,
+        text: cleanText,
+        body: cleanText,
         likes: 0,
         liked: false,
         saved: false,
-        comments: 0,
+        comments: [],
         replies: [],
-        image: payload.image,
+        image: cleanImage,
       },
       ...prev,
     ]);
@@ -244,7 +294,7 @@ export default function DashboardPage() {
       prev.map((p) => {
         if (p.id !== postId) return p;
         const nextLiked = !p.liked;
-        return { ...p, liked: nextLiked, likes: Math.max(0, p.likes + (nextLiked ? 1 : -1)) };
+        return { ...p, liked: nextLiked, likes: Math.max(0, (p.likes ?? 0) + (nextLiked ? 1 : -1)) };
       })
     );
     if (API_URL) {
@@ -265,8 +315,8 @@ export default function DashboardPage() {
         p.id === postId
           ? {
               ...p,
-              comments: p.comments + 1,
-              replies: [...(p.replies ?? []), { author: currentUser.name, text }],
+              comments: (Array.isArray(p.comments) ? p.comments.length : p.comments ?? 0) + 1,
+              replies: [...(p.replies ?? []), { author: currentUser.name || "Member", text }],
             }
           : p
       )
@@ -313,6 +363,38 @@ export default function DashboardPage() {
       onToggleFollow={handleToggleFollow}
       onClaimReward={handleClaimReward}
     >
+      <div
+        className="mz-glass-card"
+        style={{
+          padding: 12,
+          borderRadius: 12,
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#007749" }}>Quick Links:</span>
+        <Link href="/" className="mz-follow" style={{ fontSize: 12 }}>
+          Mzansi Home
+        </Link>
+        <Link href="/friends" className="mz-follow" style={{ fontSize: 12 }}>
+          Friends &amp; Follows
+        </Link>
+        <Link href="/messages" className="mz-follow" style={{ fontSize: 12 }}>
+          Messages
+        </Link>
+        <Link href="/profile" className="mz-follow" style={{ fontSize: 12 }}>
+          Profile
+        </Link>
+        <Link href="/login" className="mz-follow" style={{ fontSize: 12 }}>
+          Login
+        </Link>
+        <Link href="/register" className="mz-follow" style={{ fontSize: 12 }}>
+          Register
+        </Link>
+      </div>
+
       {statusBanner && (
         <div className="mz-post" role="status" style={{ color: "var(--green)", fontWeight: 600 }}>
           {statusBanner}
@@ -321,4 +403,3 @@ export default function DashboardPage() {
     </CommonUpgrade>
   );
 }
-

@@ -65,6 +65,7 @@ export default function FriendsPage() {
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRelationItem[]>([]);
   const [members, setMembers] = useState<FriendRelationItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [followedIds, setFollowedIds] = useState<Set<string>>(() => new Set());
   const [feedback, setFeedback] = useState<string>("");
   const [user, setUser] = useState<MzansiUser>({
     id: "me",
@@ -144,6 +145,19 @@ export default function FriendsPage() {
     loadData();
   }, [loadData]);
 
+  const handleToggleFollow = (targetUserId: string, targetName: string) => {
+    setFollowedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(targetUserId)) {
+        next.delete(targetUserId);
+        setFeedback(`Unfollowed ${targetName}.`);
+      } else {
+        next.add(targetUserId);
+        setFeedback(`Following ${targetName}.`);
+      }
+      return next;
+    });
+  };
   const handleAddFriend = async (targetUserId: string, targetName: string) => {
     setBusyId(targetUserId);
     setFeedback("");
@@ -321,14 +335,23 @@ export default function FriendsPage() {
                 </div>
 
                 {!isSelf && (
-                  <button
-                    type="button"
-                    className={isFriend || isPending ? "mz-follow followed" : "mz-primary"}
-                    disabled={isFriend || isPending || busyId === m.userId}
-                    onClick={() => handleAddFriend(m.userId, m.name)}
-                  >
-                    {isFriend ? "Friends" : isPending ? "Request Sent" : "Add Friend"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className={isFriend || isPending ? "mz-follow followed" : "mz-primary"}
+                      disabled={isFriend || isPending || busyId === m.userId}
+                      onClick={() => handleAddFriend(m.userId, m.name)}
+                    >
+                      {isFriend ? "Friends" : isPending ? "Request Sent" : "Add Friend"}
+                    </button>
+                    <button
+                      type="button"
+                      className={followedIds.has(m.userId) ? "mz-follow followed" : "mz-follow"}
+                      onClick={() => handleToggleFollow(m.userId, m.name)}
+                    >
+                      {followedIds.has(m.userId) ? "Following" : "Follow"}
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -338,5 +361,6 @@ export default function FriendsPage() {
     </CommonUpgrade>
   );
 }
+
 
 
