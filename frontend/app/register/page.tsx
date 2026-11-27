@@ -22,7 +22,7 @@ export default function RegisterPage() {
       const res = await auth.register(form);
       localStorage.setItem('token', res.accessToken);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.assign('/dashboard/');
+      window.location.assign('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -89,7 +89,7 @@ export default function RegisterPage() {
             </button>
           </form>
           <p className="mt-4 text-sm text-center text-gray-600">
-            Already have an account? <a href="/login/" className="text-[#007749] font-semibold">Sign in</a>
+            Already have an account? <a href="/login" className="text-[#007749] font-semibold">Sign in</a>
           </p>
         </div>
       </div>

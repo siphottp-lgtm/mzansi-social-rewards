@@ -18,7 +18,7 @@ export default function LoginPage() {
       const res = await auth.login({ email, password });
       localStorage.setItem('token', res.accessToken);
       localStorage.setItem('user', JSON.stringify(res.user));
-      window.location.assign('/dashboard/');
+      window.location.assign('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -57,7 +57,7 @@ export default function LoginPage() {
                 required
               />
               <div className="mt-1 text-right">
-                <a href="/forgot-password/" className="text-xs text-[#007749] font-semibold hover:underline">
+                <a href="/forgot-password" className="text-xs text-[#007749] font-semibold hover:underline">
                   Forgot password?
                 </a>
               </div>
@@ -71,7 +71,7 @@ export default function LoginPage() {
             </button>
           </form>
           <p className="mt-4 text-sm text-center text-gray-600">
-            No account? <a href="/register/" className="text-[#007749] font-semibold">Register</a>
+            No account? <a href="/register" className="text-[#007749] font-semibold">Register</a>
           </p>
         </div>
       </div>
