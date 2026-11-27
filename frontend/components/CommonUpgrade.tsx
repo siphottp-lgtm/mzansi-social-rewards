@@ -1109,9 +1109,18 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
             <div className="mz-greeting">
               <div>
                 <div className="mz-label">{todayLabel}</div>
-                <h1 style={pageTitle === "Your profile" ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 } : undefined}>
-                  {pageTitle}
-                </h1>
+                {(() => {
+                  const isDashboardGreeting =
+                    pathname === "/dashboard" &&
+                    (!pageTitle || pageTitle.trim().toLowerCase().startsWith("a good day to connect"));
+                  const displayTitle = isDashboardGreeting ? "People Shall Govern - Freedom Chatter" : pageTitle;
+                  const useCompactSize = pageTitle === "Your profile" || isDashboardGreeting;
+                  return (
+                    <h1 style={useCompactSize ? { fontSize: "clamp(1.2rem, 1.8vw, 1.5rem)", lineHeight: 1.2 } : undefined}>
+                      {displayTitle}
+                    </h1>
+                  );
+                })()}
                 <p className="mz-muted mz-tiny">{pageSubtitle}</p>
               </div>
               <span style={{ fontSize: 24, color: "var(--orange)" }} aria-hidden="true">
@@ -1444,3 +1453,4 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     </div>
   );
 };
+
