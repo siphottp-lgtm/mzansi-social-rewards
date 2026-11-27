@@ -1,5 +1,6 @@
 ﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: { root: process.cwd() },
   output: 'export',
   trailingSlash: true,
   images: {
@@ -8,3 +9,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+
