@@ -248,6 +248,387 @@ export const SwipeUpTaskbar: React.FC<SwipeUpTaskbarProps> = ({
               </button>
               <button
                 type="button"
+                className={`mz-follow ${pathname === "/friends" ? "followed" : ""}`}
+                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
+                onClick={() => {
+                  setExpanded(false);
+                  router.push("/friends");
+                }}
+              >
+                Friends & Members
+              </button>
+              <button
+                type="button"
+                className={`mz-follow ${pathname === "/messages" ? "followed" : ""}`}
+                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
+                onClick={() => {
+                  setExpanded(false);
+                  router.push("/messages");
+                }}
+              >
+                Messages
+              </button>
+              <button
+                type="button"
+                className={`mz-follow ${pathname === "/profile" ? "followed" : ""}`}
+                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
+                onClick={() => {
+                  setExpanded(false);
+                  router.push("/profile");
+                }}
+              >
+                Profile
+              </button>
+            </div>
+          )}
+
+          {activeTree === "kasiCoin" && (
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {onConnectWallet && (
+                  <button type="button" className="mz-follow" style={{ fontSize: 11 }} onClick={onConnectWallet}>
+                    {walletAddress ? `Wallet: ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
+                  </button>
+                )}
+                {onClaimReward && (
+                  <button type="button" className="mz-primary" onClick={onClaimReward}>
+                    Claim KASI Coin
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="mz-follow"
+                  style={{ fontSize: 11 }}
+                  onClick={() => setTipOpen((prev) => !prev)}
+                >
+                  Send KASI Tip
+                </button>
+                <span className="mz-tiny mz-muted">{claimStatus}</span>
+              </div>
+
+              {tipOpen && onSendTip && (
+                <form onSubmit={handleTipSubmit} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <input
+                    value={tipRecipient}
+                    onChange={(e) => setTipRecipient(e.target.value)}
+                    placeholder="0x… or member"
+                    required
+                    style={{
+                      flex: 1,
+                      minWidth: 130,
+                      border: "1px solid var(--line)",
+                      borderRadius: 6,
+                      padding: "6px 8px",
+                      fontSize: 11,
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value={tipAmount}
+                    onChange={(e) => setTipAmount(e.target.value)}
+                    required
+                    style={{
+                      width: 72,
+                      border: "1px solid var(--line)",
+                      borderRadius: 6,
+                      padding: "6px 8px",
+                      fontSize: 11,
+                    }}
+                  />
+                  <button type="submit" className="mz-primary">
+                    Send
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {activeTree === "groups" && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              {spaces.length === 0 ? (
+                <Link
+                  href="/friends"
+                  className="mz-follow"
+                  style={{ fontSize: 11 }}
+                  onClick={() => setExpanded(false)}
+                >
+                  Browse Members & Spaces
+                </Link>
+              ) : (
+                spaces.map((sp) => (
+                  <button
+                    key={sp.id}
+                    type="button"
+                    className={`mz-follow ${selectedSpace === sp.name ? "followed" : ""}`}
+                    style={{ fontSize: 11 }}
+                    onClick={() => {
+                      onSelectSpace?.(selectedSpace === sp.name ? "" : sp.name);
+                      setExpanded(false);
+                    }}
+                  >
+                    {sp.icon} {sp.name}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const MzansiBrandMark: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
+  <Link href="/" className="mz-brand" style={compact ? { fontSize: 22 } : undefined}>
+    <span aria-label="South Africa flag" role="img" style={{ fontSize: compact ? 20 : 24, lineHeight: 1 }}>
+      🇿🇦
+    </span>
+    <span className="mz-brand-mark" style={compact ? { fontSize: 28 } : undefined}>
+      ✳
+    </span>
+    <span>mzansi</span>
+  </Link>
+);
+
+export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
+  currentUser,
+  posts = [],
+  spaces = [],
+  suggestedMembers = [],
+  showFeed = true,
+  watermarkKey = "image1",
+  pageTitle = "A good day to connect.",
+  pageSubtitle = "Local community and KASI Coin on Celo.",
+  onCreatePost,
+  onToggleLike,
+  onToggleSave,
+  onAddComment,
+  onToggleFollow,
+  onClaimReward,
+  children,
+}) => {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const [openBranches, setOpenBranches] = useState<{
+    workspace: boolean;
+    kasiCoin: boolean;
+    corners: boolean;
+  }>({
+    workspace: true,
+    kasiCoin: true,
+    corners: true,
+  });
+
+  const [savedOnly, setSavedOnly] = useState<boolean>(false);
+  const [filter, setFilter] = useState<"all" | "following" | "latest">("all");
+  const [selectedSpace, setSelectedSpace] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [draftText, setDraftText] = useState<string>("");
+  const [draftImage, setDraftImage] = useState<string>("");
+  const [openReplyId, setOpenReplyId] = useState<string | number | null>(null);
+  const [replyText, setReplyText] = useState<string>("");
+  const [notice, setNotice] = useState<string>("");
+  const [walletAddress, setWalletAddress] = useState<string>("");
+
+  const [tipOpen, setTipOpen] = useState<boolean>(false);
+  const [tipRecipient, setTipRecipient] = useState<string>("");
+  const [tipAmount, setTipAmount] = useState<string>("10");
+  const [claimStatus, setClaimStatus] = useState<string>("Celo ready");
+
+  const showNotice = (msg: string) => {
+    setNotice(msg);
+    window.setTimeout(() => setNotice(""), 3500);
+  };
+
+  const toggleBranch = (key: "workspace" | "kasiCoin" | "corners") => {
+    setOpenBranches((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleConnectWalletInfo = async () => {
+    const eth = (
+      window as unknown as {
+        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+      }
+    ).ethereum;
+    if (!eth?.request) {
+      showNotice("Connect MiniPay or MetaMask on Celo.");
+      return;
+    }
+    try {
+      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
+      if (accounts?.[0]) {
+        setWalletAddress(accounts[0]);
+        showNotice(`Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+      }
+    } catch {
+      showNotice("Wallet connection cancelled.");
+    }
+  };
+
+  const handleTriggerClaim = async () => {
+    setClaimStatus("Claiming…");
+    try {
+      if (onClaimReward) {
+        await onClaimReward();
+        setClaimStatus("Claimed");
+      } else {
+        await handleConnectWalletInfo();
+        setClaimStatus("Wallet ready");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Claim failed.";
+      setClaimStatus("Claim error");
+      showNotice(message);
+    }
+  };
+
+  const handleSendTipAmount = async (target: string, amt: number) => {
+    const eth = (
+      window as unknown as {
+        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
+      }
+    ).ethereum;
+
+    if (!eth?.request) {
+      showNotice(`Tip queued: ${amt} KASI to ${target}.`);
+      return;
+    }
+
+    try {
+      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
+      const fromAddr = accounts?.[0];
+      if (fromAddr) setWalletAddress(fromAddr);
+
+      if (target.startsWith("0x") && target.length === 42 && fromAddr) {
+        const weiHex = `0x${BigInt(Math.round(amt * 1e18)).toString(16)}`;
+        const txHash = (await eth.request({
+          method: "eth_sendTransaction",
+          params: [{ from: fromAddr, to: target, value: weiHex }],
+        })) as string;
+        setClaimStatus(`Sent (${txHash.slice(0, 8)}…)`);
+        showNotice(`Sent ${amt} KASI to ${target.slice(0, 6)}…${target.slice(-4)}`);
+      } else {
+        setClaimStatus(`Tip set (${amt} KASI)`);
+        showNotice(`Tip of ${amt} KASI set for ${target}.`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Tip cancelled.";
+      setClaimStatus("Tip cancelled");
+      showNotice(msg);
+    }
+  };
+
+  const handleSendKasiTip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = tipRecipient.trim();
+    const amt = Number(tipAmount);
+    if (!target || Number.isNaN(amt) || amt <= 0) {
+      showNotice("Enter a recipient and valid amount.");
+      return;
+    }
+    await handleSendTipAmount(target, amt);
+    setTipRecipient("");
+    setTipOpen(false);
+  };
+
+  const visiblePosts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    let list = posts.filter((p) => {
+      if (savedOnly && !p.saved) return false;
+      if (selectedSpace && p.space !== selectedSpace) return false;
+      if (filter === "following" && !p.following) return false;
+      if (!q) return true;
+      return `${p.name} ${p.text} ${p.tag ?? ""} ${p.space}`.toLowerCase().includes(q);
+    });
+    if (filter === "latest") {
+      list = [...list].sort((a, b) => Number(b.id) - Number(a.id));
+    }
+    return list;
+  }, [posts, savedOnly, selectedSpace, filter, searchQuery]);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
+      showNotice("Choose an image under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setDraftImage(reader.result);
+        showNotice("Photo attached.");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePostSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = draftText.trim();
+    if (!trimmed || !onCreatePost) return;
+    await onCreatePost({
+      text: trimmed,
+      space: selectedSpace || spaces[0]?.name || "Community",
+      image: draftImage || undefined,
+    });
+    setDraftText("");
+    setDraftImage("");
+    showNotice("Post published.");
+  };
+
+  const todayLabel = new Date()
+    .toLocaleDateString("en-ZA", { weekday: "long", month: "long", day: "numeric" })
+    .toUpperCase();
+
+  return (
+    <div className="mz-common-app" style={{ position: "relative", paddingBottom: 68, background: "transparent" }}>
+      <WatermarkBackdrop imageKey={watermarkKey} />
+
+      <aside className="mz-sidebar" aria-label="Main navigation" style={{ position: "relative", zIndex: 1 }}>
+        <MzansiBrandMark />
+        <p className="mz-tagline">KASI Coin · Celo</p>
+
+        <div style={{ display: "grid", gap: 14 }}>
+          <div>
+            <button
+              type="button"
+              className="mz-label"
+              style={{
+                background: "none",
+                border: 0,
+                padding: "4px 6px",
+                width: "100%",
+                textAlign: "left",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+              }}
+              onClick={() => toggleBranch("workspace")}
+              aria-expanded={openBranches.workspace}
+            >
+              <span>Workspace</span>
+              <span>{openBranches.workspace ? "▾" : "▸"}</span>
+            </button>
+
+            {openBranches.workspace && (
+              <nav className="mz-nav" style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)" }}>
+                <button
+                  type="button"
+                  className={pathname === "/dashboard" && !savedOnly ? "active" : ""}
+                  onClick={() => {
+                    setSavedOnly(false);
+                    setSelectedSpace("");
+                    router.push("/dashboard");
+                  }}
+                >
+                  Feed
+                </button>
+                <button
+                  type="button"
                   className={pathname === "/friends" ? "active" : ""}
                   onClick={() => router.push("/friends")}
                 >
