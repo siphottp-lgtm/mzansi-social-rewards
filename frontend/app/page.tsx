@@ -13,7 +13,7 @@ export default function HomePage() {
         gridTemplateColumns: "1fr",
         position: "relative",
         minHeight: "100vh",
-        paddingBottom: 120,
+        paddingBottom: 156,
         background: "transparent",
       }}
     >
@@ -30,7 +30,7 @@ export default function HomePage() {
         }}
       >
         <div className="mz-flag-strip" />
-        <header className="mz-topbar" style={{ background: "rgba(255, 255, 255, 0.65)", backdropFilter: "blur(8px)" }}>
+        <header className="mz-topbar" style={{ background: "rgba(255, 255, 255, 0.72)", backdropFilter: "blur(8px)" }}>
           <MzansiBrandMark />
           <div className="mz-top-actions">
             <Link href="/dashboard" className="mz-action" style={{ fontSize: 12, fontWeight: 600, color: "var(--ink)" }}>
@@ -45,7 +45,7 @@ export default function HomePage() {
           </div>
         </header>
 
-        <main style={{ padding: "48px 24px 64px", display: "grid", placeItems: "center" }}>
+        <main style={{ padding: "44px 24px 72px", display: "grid", placeItems: "center" }}>
           <section
             className="mz-banner"
             style={{
@@ -54,12 +54,15 @@ export default function HomePage() {
               padding: "32px 28px",
               textAlign: "center",
               borderRadius: 16,
+              background: "rgba(255, 255, 255, 0.84)",
+              backdropFilter: "blur(10px)",
+              border: "1px solid rgba(0, 119, 73, 0.35)",
             }}
           >
             <h1
               style={{
-                margin: "0 0 6px",
-                fontSize: "clamp(1.9rem, 3.8vw, 2.7rem)",
+                margin: "0 0 8px",
+                fontSize: "clamp(2rem, 4vw, 2.8rem)",
                 fontWeight: 800,
                 lineHeight: 1.12,
                 color: "#0b0f14",
@@ -68,17 +71,17 @@ export default function HomePage() {
               Mzansi
             </h1>
 
-            <div
+            <p
               style={{
-                margin: "0 auto 22px",
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.04em",
-                color: "#007749",
+                margin: "0 auto 24px",
+                fontSize: 14,
+                fontWeight: 800,
+                letterSpacing: "0.03em",
+                color: "#005c38",
               }}
             >
               The People Shall Govern - Freedom Chatter
-            </div>
+            </p>
 
             <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
               <Link href="/register" className="mz-primary" style={{ padding: "10px 18px", fontSize: 13 }}>
@@ -90,7 +93,7 @@ export default function HomePage() {
                 style={{
                   padding: "10px 18px",
                   fontSize: 13,
-                  background: "rgba(255, 255, 255, 0.45)",
+                  background: "rgba(255, 255, 255, 0.65)",
                   borderColor: "#007749",
                   color: "#0b0f14",
                 }}
@@ -103,7 +106,7 @@ export default function HomePage() {
                 style={{
                   padding: "10px 18px",
                   fontSize: 13,
-                  background: "rgba(255, 255, 255, 0.45)",
+                  background: "rgba(255, 255, 255, 0.65)",
                   borderColor: "#ffb81c",
                   color: "#0b0f14",
                 }}
@@ -117,21 +120,22 @@ export default function HomePage() {
 
       <SwipeUpTaskbar />
 
-      {/* Bottom Tribute Note */}
+      {/* Tribute moved up 2 steps above the bottom streaming banner for clear visibility */}
       <div
         style={{
           position: "fixed",
           left: 0,
           right: 0,
-          bottom: 32,
+          bottom: 68,
           zIndex: 44,
           textAlign: "center",
-          padding: "6px 14px",
-          background: "rgba(255, 255, 255, 0.72)",
+          padding: "8px 16px",
+          background: "rgba(255, 255, 255, 0.88)",
           backdropFilter: "blur(8px)",
-          borderTop: "1px solid rgba(0, 119, 73, 0.25)",
-          fontSize: 12,
-          fontWeight: 700,
+          borderTop: "1px solid rgba(0, 119, 73, 0.35)",
+          borderBottom: "1px solid rgba(0, 119, 73, 0.2)",
+          fontSize: 13,
+          fontWeight: 800,
           color: "#0b0f14",
         }}
       >
