@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { CommonUpgrade, type MzansiUser } from "../../components/CommonUpgrade";
-import { friendsApi, users } from "../../lib/api";
+import { friendsApi, SHARED_STORAGE_KEYS, users } from "../../lib/api";
 
 interface FriendRelationItem {
   id: string; // friendship or user id
@@ -115,6 +115,11 @@ export default function FriendsPage() {
       ]).map(mapPerson);
 
       setFriends(accepted);
+      try {
+        window.localStorage.setItem("mzansi_friends_v1", JSON.stringify(accepted));
+      } catch {
+        // Ignore storage error
+      }
       setIncomingRequests(incoming);
       setOutgoingRequests(outgoing);
     } catch {
@@ -125,6 +130,11 @@ export default function FriendsPage() {
       const dirData = await users.directory();
       const list = extractList(dirData, ["users", "members", "directory", "items", "data"]).map(mapPerson);
       setMembers(list);
+      try {
+        window.localStorage.setItem(SHARED_STORAGE_KEYS.members, JSON.stringify(list));
+      } catch {
+        // Ignore storage error
+      }
     } catch {
       // Ignore if directory isn't available yet
     }
@@ -328,4 +338,5 @@ export default function FriendsPage() {
     </CommonUpgrade>
   );
 }
+
 
