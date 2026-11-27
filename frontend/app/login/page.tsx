@@ -33,7 +33,7 @@ export default function LoginPage() {
         <div style={{ padding: "16px 24px" }}>
           <MzansiBrandMark compact />
         </div>
-        <div className="max-w-md mx-auto">
+        <div className="max-w-md mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold mb-6">Sign in to Mzansi</h1>
           <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-xl border">
             {error && <p className="text-red-600 text-sm break-words">{error}</p>}
@@ -79,3 +79,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

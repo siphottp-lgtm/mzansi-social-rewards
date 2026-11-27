@@ -270,7 +270,7 @@ export default function MessagesPage() {
       currentUser={user}
       showFeed={false}
       pageTitle="Messages"
-      pageSubtitle="Direct conversations with member names clearly displayed."
+      pageSubtitle="Direct conversations with members."
     >
       {statusText && (
         <div className="mz-post mz-tiny" style={{ color: "var(--orange)", fontWeight: 600 }}>
@@ -380,3 +380,4 @@ export default function MessagesPage() {
     </CommonUpgrade>
   );
 }
+

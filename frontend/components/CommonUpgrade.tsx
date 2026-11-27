@@ -84,7 +84,7 @@ export const WatermarkBackdrop: React.FC<{ imageKey: WatermarkKey }> = ({ imageK
         inset: 0,
         pointerEvents: "none",
         zIndex: 0,
-        opacity: 0.14,
+        opacity: 0.1,
         backgroundImage: `url("${src}")`,
         backgroundSize: "cover",
         backgroundPosition: "center",
@@ -114,8 +114,8 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
   const products = [
     { name: "KASI Coin", tag: "Celo Rewards & Tipping", href: "/dashboard" },
     { name: "KASI Wallet", tag: "MiniPay & Celo", href: "/profile" },
-    { name: "Groups & Pages", tag: "Corners & Subscriptions", href: "/friends" },
-    { name: "Direct Messages", tag: "Member Chat", href: "/messages" },
+    { name: "Groups & Pages", tag: "Community Spaces", href: "/friends" },
+    { name: "Messages", tag: "Direct Chat", href: "/messages" },
   ];
 
   return (
@@ -161,15 +161,15 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
           }}
         >
           <span>{expanded ? "▾" : "▴"}</span>
-          <span>Swipe up for Mzansi Products</span>
+          <span>Mzansi Apps</span>
         </button>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link href="/dashboard" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
-            KASI Coin
+            Feed
           </Link>
           <Link href="/friends" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
-            Groups & Friends
+            Friends
           </Link>
           <Link href="/messages" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
             Messages
@@ -233,7 +233,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   showFeed = true,
   watermarkKey = "image1",
   pageTitle = "A good day to connect.",
-  pageSubtitle = "Meaningful participation · Real local commerce on Celo.",
+  pageSubtitle = "Local community and KASI Coin on Celo.",
   onCreatePost,
   onToggleLike,
   onToggleSave,
@@ -258,7 +258,6 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   const [savedOnly, setSavedOnly] = useState<boolean>(false);
   const [filter, setFilter] = useState<"all" | "following" | "latest">("all");
   const [selectedSpace, setSelectedSpace] = useState<string>("");
-  const [desiredGroupImage, setDesiredGroupImage] = useState<WatermarkKey>("image1");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [draftText, setDraftText] = useState<string>("");
   const [draftImage, setDraftImage] = useState<string>("");
@@ -270,7 +269,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
   const [tipOpen, setTipOpen] = useState<boolean>(false);
   const [tipRecipient, setTipRecipient] = useState<string>("");
   const [tipAmount, setTipAmount] = useState<string>("10");
-  const [claimStatus, setClaimStatus] = useState<string>("Ready on Celo");
+  const [claimStatus, setClaimStatus] = useState<string>("Celo ready");
 
   const showNotice = (msg: string) => {
     setNotice(msg);
@@ -281,14 +280,6 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     setOpenBranches((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleRequestGroupBackground = (e: React.FormEvent) => {
-    e.preventDefault();
-    const targetName = selectedSpace || spaces[0]?.name || "Community Group/Page";
-    showNotice(
-      `Background subscription & request sent for "${targetName}" → ${desiredGroupImage.toUpperCase()} (${WATERMARK_IMAGES[desiredGroupImage]}).`
-    );
-  };
-
   const handleConnectWalletInfo = async () => {
     const eth = (
       window as unknown as {
@@ -296,33 +287,33 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
       }
     ).ethereum;
     if (!eth?.request) {
-      showNotice("Wallet info: No browser wallet detected. Connect MiniPay or MetaMask on Celo.");
+      showNotice("Connect MiniPay or MetaMask on Celo.");
       return;
     }
     try {
       const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
       if (accounts?.[0]) {
         setWalletAddress(accounts[0]);
-        showNotice(`Connected wallet: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
+        showNotice(`Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
       }
     } catch {
-      showNotice("Wallet connection request was cancelled.");
+      showNotice("Wallet connection cancelled.");
     }
   };
 
   const handleTriggerClaim = async () => {
-    setClaimStatus("Claiming on Celo…");
+    setClaimStatus("Claiming…");
     try {
       if (onClaimReward) {
         await onClaimReward();
-        setClaimStatus("Claim submitted");
+        setClaimStatus("Claimed");
       } else {
         await handleConnectWalletInfo();
         setClaimStatus("Wallet ready");
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Claim failed";
-      setClaimStatus(`Error: ${message}`);
+      const message = err instanceof Error ? err.message : "Claim failed.";
+      setClaimStatus("Claim error");
       showNotice(message);
     }
   };
@@ -332,7 +323,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     const target = tipRecipient.trim();
     const amt = Number(tipAmount);
     if (!target || Number.isNaN(amt) || amt <= 0) {
-      showNotice("Enter a valid recipient address or member handle and KASI amount.");
+      showNotice("Enter a recipient and valid amount.");
       return;
     }
 
@@ -343,7 +334,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     ).ethereum;
 
     if (!eth?.request) {
-      showNotice(`Tip queued (${amt} KASI → ${target}). Connect a Celo wallet to sign on-chain.`);
+      showNotice(`Tip queued: ${amt} KASI to ${target}.`);
       setTipRecipient("");
       setTipOpen(false);
       return;
@@ -360,17 +351,17 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
           method: "eth_sendTransaction",
           params: [{ from: fromAddr, to: target, value: weiHex }],
         })) as string;
-        setClaimStatus(`Tip sent (${txHash.slice(0, 10)}…)`);
-        showNotice(`Sent ${amt} KASI tip to ${target.slice(0, 6)}…${target.slice(-4)}`);
+        setClaimStatus(`Sent (${txHash.slice(0, 8)}…)`);
+        showNotice(`Sent ${amt} KASI to ${target.slice(0, 6)}…${target.slice(-4)}`);
       } else {
-        setClaimStatus(`Tip recorded (${amt} KASI)`);
-        showNotice(`Tip of ${amt} KASI prepared for ${target}.`);
+        setClaimStatus(`Tip set (${amt} KASI)`);
+        showNotice(`Tip of ${amt} KASI set for ${target}.`);
       }
 
       setTipRecipient("");
       setTipOpen(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Tip transaction cancelled";
+      const msg = err instanceof Error ? err.message : "Tip cancelled.";
       setClaimStatus("Tip cancelled");
       showNotice(msg);
     }
@@ -395,7 +386,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
-      showNotice("Please select an image smaller than 2 MB.");
+      showNotice("Choose an image under 2 MB.");
       return;
     }
     const reader = new FileReader();
@@ -419,7 +410,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
     });
     setDraftText("");
     setDraftImage("");
-    showNotice("Shared with your Mzansi community.");
+    showNotice("Post published.");
   };
 
   const todayLabel = new Date()
@@ -432,7 +423,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
 
       <aside className="mz-sidebar" aria-label="Main navigation" style={{ position: "relative", zIndex: 1 }}>
         <MzansiBrandMark />
-        <p className="mz-tagline">A little closer · KASI Coin</p>
+        <p className="mz-tagline">KASI Coin · Celo</p>
 
         <div style={{ display: "grid", gap: 14 }}>
           <div>
@@ -467,21 +458,21 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                     router.push("/dashboard");
                   }}
                 >
-                  ↳ Feed
+                  Feed
                 </button>
                 <button
                   type="button"
                   className={pathname === "/friends" ? "active" : ""}
                   onClick={() => router.push("/friends")}
                 >
-                  ↳ Friends & Members
+                  Friends & Members
                 </button>
                 <button
                   type="button"
                   className={pathname === "/messages" ? "active" : ""}
                   onClick={() => router.push("/messages")}
                 >
-                  ↳ Messages
+                  Messages
                 </button>
                 <button
                   type="button"
@@ -491,14 +482,14 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                     if (pathname !== "/dashboard") router.push("/dashboard");
                   }}
                 >
-                  ↳ Saved
+                  Saved
                 </button>
                 <button
                   type="button"
                   className={pathname === "/profile" ? "active" : ""}
                   onClick={() => router.push("/profile")}
                 >
-                  ↳ Profile
+                  Profile
                 </button>
               </nav>
             )}
@@ -534,7 +525,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
                   onClick={handleConnectWalletInfo}
                 >
-                  ↳ Wallet {walletAddress ? `(${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)})` : "· Connect"}
+                  Wallet {walletAddress ? `(${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)})` : "· Connect"}
                 </button>
                 <button
                   type="button"
@@ -542,7 +533,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
                   onClick={handleTriggerClaim}
                 >
-                  ↳ Claim Rewards (Celo)
+                  Claim Rewards
                 </button>
                 <button
                   type="button"
@@ -550,7 +541,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   style={{ padding: "7px 8px", textAlign: "left", justifyContent: "flex-start" }}
                   onClick={() => setTipOpen((prev) => !prev)}
                 >
-                  ↳ Send KASI Tip {tipOpen ? "▴" : "▾"}
+                  Send KASI Tip {tipOpen ? "▴" : "▾"}
                 </button>
 
                 {tipOpen && (
@@ -568,7 +559,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                     <input
                       value={tipRecipient}
                       onChange={(e) => setTipRecipient(e.target.value)}
-                      placeholder="0x… or @member"
+                      placeholder="0x… or member"
                       required
                       style={{
                         border: "1px solid var(--line)",
@@ -596,102 +587,66 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                         }}
                       />
                       <button type="submit" className="mz-primary" style={{ padding: "5px 9px", fontSize: 11, flex: 1 }}>
-                        Send Tip
+                        Send
                       </button>
                     </div>
                   </form>
                 )}
 
                 <div className="mz-tiny mz-muted" style={{ padding: "2px 8px" }}>
-                  ↳ Status: {claimStatus}
-                </div>
-                <div className="mz-tiny mz-muted" style={{ padding: "0 8px 2px" }}>
-                  ↳ Network: Celo · Token: KASI
+                  Status: {claimStatus}
                 </div>
               </div>
             )}
           </div>
 
-          <div>
-            <button
-              type="button"
-              className="mz-label"
-              style={{
-                background: "none",
-                border: 0,
-                padding: "4px 6px",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-              onClick={() => toggleBranch("corners")}
-              aria-expanded={openBranches.corners}
-            >
-              <span>Groups & Pages</span>
-              <span>{openBranches.corners ? "▾" : "▸"}</span>
-            </button>
+          {spaces.length > 0 && (
+            <div>
+              <button
+                type="button"
+                className="mz-label"
+                style={{
+                  background: "none",
+                  border: 0,
+                  padding: "4px 6px",
+                  width: "100%",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+                onClick={() => toggleBranch("corners")}
+                aria-expanded={openBranches.corners}
+              >
+                <span>Groups & Pages</span>
+                <span>{openBranches.corners ? "▾" : "▸"}</span>
+              </button>
 
-            {openBranches.corners && (
-              <div style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)", display: "grid", gap: 6 }}>
-                {spaces.map((sp) => (
-                  <a
-                    key={sp.id}
-                    href={`#space-${sp.id}`}
-                    className={`mz-space-link ${selectedSpace === sp.name ? "active" : ""}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setSelectedSpace((prev) => (prev === sp.name ? "" : sp.name));
-                    }}
-                  >
-                    <span
-                      className="mz-space-icon"
-                      style={sp.badgeBg ? { background: sp.badgeBg } : undefined}
+              {openBranches.corners && (
+                <div style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)", display: "grid", gap: 6 }}>
+                  {spaces.map((sp) => (
+                    <a
+                      key={sp.id}
+                      href={`#space-${sp.id}`}
+                      className={`mz-space-link ${selectedSpace === sp.name ? "active" : ""}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setSelectedSpace((prev) => (prev === sp.name ? "" : sp.name));
+                      }}
                     >
-                      {sp.icon}
-                    </span>
-                    ↳ {sp.name}
-                  </a>
-                ))}
-
-                <form
-                  onSubmit={handleRequestGroupBackground}
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    marginTop: 4,
-                    padding: 8,
-                    borderRadius: 6,
-                    border: "1px solid var(--line)",
-                    background: "var(--bg)",
-                  }}
-                >
-                  <div className="mz-tiny" style={{ fontWeight: 700 }}>
-                    Background Image Request
-                  </div>
-                  <select
-                    value={desiredGroupImage}
-                    onChange={(e) => setDesiredGroupImage(e.target.value as WatermarkKey)}
-                    style={{
-                      border: "1px solid var(--line)",
-                      borderRadius: 5,
-                      padding: "5px 6px",
-                      fontSize: 11,
-                      background: "var(--white)",
-                    }}
-                  >
-                    <option value="image1">Image no:1 (1789794530888)</option>
-                    <option value="image2">Image no:2 (1795326848083)</option>
-                    <option value="image3">Image no:3 (1789669657455)</option>
-                  </select>
-                  <button type="submit" className="mz-follow" style={{ fontSize: 11 }}>
-                    Request & Subscribe
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
+                      <span
+                        className="mz-space-icon"
+                        style={sp.badgeBg ? { background: sp.badgeBg } : undefined}
+                      >
+                        {sp.icon}
+                      </span>
+                      {sp.name}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <Link href="/profile" className="mz-profile">
@@ -715,7 +670,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search Mzansi…"
+                  placeholder="Search…"
                 />
               </label>
             )}
@@ -750,15 +705,15 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
               <>
                 <section className="mz-banner">
                   <div className="mz-label" style={{ color: "var(--green)" }}>
-                    KASI Coin · Celo Rewards
+                    KASI Coin · Celo
                   </div>
                   <h2>Less scrolling. More belonging.</h2>
                   <p className="mz-tiny mz-muted">
-                    Earn KASI Coin rewards for constructive posts and supporting local community members.
+                    Share updates, connect with members, and claim KASI Coin rewards on Celo.
                   </p>
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
                     <button type="button" className="mz-primary" onClick={handleTriggerClaim}>
-                      Claim KASI Coin (Celo) →
+                      Claim KASI Coin →
                     </button>
                     <button
                       type="button"
@@ -766,7 +721,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                       style={{ background: "var(--white)", fontSize: 11 }}
                       onClick={handleConnectWalletInfo}
                     >
-                      {walletAddress ? `Wallet: ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Wallet Details"}
+                      {walletAddress ? `Wallet: ${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}` : "Connect Wallet"}
                     </button>
                   </div>
                 </section>
@@ -807,7 +762,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                         </button>
                       </div>
                       <button className="mz-primary" type="submit">
-                        Share a thought →
+                        Post →
                       </button>
                     </div>
                   </form>
@@ -840,7 +795,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                 <div>
                   {visiblePosts.length === 0 ? (
                     <div className="mz-post mz-muted" style={{ textAlign: "center" }}>
-                      No posts loaded yet.
+                      No posts yet.
                     </div>
                   ) : (
                     visiblePosts.map((post) => (
@@ -916,7 +871,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                             <input
                               value={replyText}
                               onChange={(e) => setReplyText(e.target.value)}
-                              placeholder="Add a kind thought…"
+                              placeholder="Write a reply…"
                               maxLength={500}
                               required
                               style={{
@@ -957,7 +912,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
             <aside className="mz-rail" aria-label="Community activity">
               <section className="mz-rail-section">
                 <div className="mz-rail-heading">
-                  <h2>Community members</h2>
+                  <h2>Members</h2>
                 </div>
                 {suggestedMembers.map((member) => (
                   <div key={member.id} className="mz-person">
