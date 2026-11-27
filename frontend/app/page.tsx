@@ -13,7 +13,7 @@ export default function HomePage() {
         gridTemplateColumns: "1fr",
         position: "relative",
         minHeight: "100vh",
-        paddingBottom: 96,
+        paddingBottom: 120,
         background: "transparent",
       }}
     >
@@ -45,51 +45,40 @@ export default function HomePage() {
           </div>
         </header>
 
-        <main style={{ padding: "56px 24px 64px", display: "grid", placeItems: "center" }}>
+        <main style={{ padding: "48px 24px 64px", display: "grid", placeItems: "center" }}>
           <section
             className="mz-banner"
             style={{
               width: "100%",
               maxWidth: 680,
-              padding: "36px 28px",
+              padding: "32px 28px",
               textAlign: "center",
               borderRadius: 16,
             }}
           >
-            <div
-              className="mz-label"
-              style={{
-                color: "#007749",
-                letterSpacing: "0.08em",
-                marginBottom: 8,
-              }}
-            >
-              🇿🇦 MZANSI COMMUNITY NETWORK
-            </div>
-
             <h1
               style={{
-                margin: "0 0 12px",
-                fontSize: "clamp(1.85rem, 3.6vw, 2.6rem)",
+                margin: "0 0 6px",
+                fontSize: "clamp(1.9rem, 3.8vw, 2.7rem)",
                 fontWeight: 800,
-                lineHeight: 1.15,
+                lineHeight: 1.12,
                 color: "#0b0f14",
               }}
             >
-              Welcome to Mzansi
+              Mzansi
             </h1>
 
-            <p
+            <div
               style={{
                 margin: "0 auto 22px",
-                maxWidth: 480,
-                fontSize: 14,
-                lineHeight: 1.55,
-                color: "rgba(11, 15, 20, 0.82)",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                color: "#007749",
               }}
             >
-              Connect with friends, share local moments, and build together across South Africa.
-            </p>
+              The People Shall Govern - Freedom Chatter
+            </div>
 
             <div style={{ display: "flex", justifyContent: "center", gap: 10, flexWrap: "wrap" }}>
               <Link href="/register" className="mz-primary" style={{ padding: "10px 18px", fontSize: 13 }}>
@@ -126,10 +115,29 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* Taskbar keeps extra navigation/tools tucked away cleanly */}
       <SwipeUpTaskbar />
 
-      {/* Bottom Streaming Banner */}
+      {/* Bottom Tribute Note */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: 32,
+          zIndex: 44,
+          textAlign: "center",
+          padding: "6px 14px",
+          background: "rgba(255, 255, 255, 0.72)",
+          backdropFilter: "blur(8px)",
+          borderTop: "1px solid rgba(0, 119, 73, 0.25)",
+          fontSize: 12,
+          fontWeight: 700,
+          color: "#0b0f14",
+        }}
+      >
+        Tribute to Mrs. Jacinta ZM Zuma
+      </div>
+
       <div className="mz-flag-marquee" role="region" aria-label="Community Banner">
         <div className="mz-flag-marquee-track">
           <span>🇿🇦 Freedom Chatter • People Shall Govern</span>
