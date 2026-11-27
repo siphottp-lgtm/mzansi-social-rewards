@@ -94,9 +94,35 @@ export const WatermarkBackdrop: React.FC<{ imageKey: WatermarkKey }> = ({ imageK
   );
 };
 
-export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({ onNotify }) => {
+interface SwipeUpTaskbarProps {
+  spaces?: MzansiSpace[];
+  selectedSpace?: string;
+  onSelectSpace?: (spaceName: string) => void;
+  onConnectWallet?: () => void;
+  onClaimReward?: () => void;
+  onSendTip?: (recipient: string, amount: number) => Promise<void> | void;
+  walletAddress?: string;
+  claimStatus?: string;
+}
+
+export const SwipeUpTaskbar: React.FC<SwipeUpTaskbarProps> = ({
+  spaces = [],
+  selectedSpace = "",
+  onSelectSpace,
+  onConnectWallet,
+  onClaimReward,
+  onSendTip,
+  walletAddress = "",
+  claimStatus = "Celo ready",
+}) => {
+  const router = useRouter();
+  const pathname = usePathname();
   const [expanded, setExpanded] = useState<boolean>(false);
+  const [activeTree, setActiveTree] = useState<"workspace" | "kasiCoin" | "groups">("workspace");
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [tipOpen, setTipOpen] = useState<boolean>(false);
+  const [tipRecipient, setTipRecipient] = useState<string>("");
+  const [tipAmount, setTipAmount] = useState<string>("10");
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     setTouchStartY(e.touches[0]?.clientY ?? null);
@@ -106,17 +132,26 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
     if (touchStartY === null) return;
     const endY = e.changedTouches[0]?.clientY ?? touchStartY;
     const deltaY = touchStartY - endY;
-    if (deltaY > 24) setExpanded(true);
-    if (deltaY < -24) setExpanded(false);
+    if (deltaY > 20) setExpanded(true);
+    if (deltaY < -20) setExpanded(false);
     setTouchStartY(null);
   };
 
-  const products = [
-    { name: "KASI Coin", tag: "Celo Rewards & Tipping", href: "/dashboard" },
-    { name: "KASI Wallet", tag: "MiniPay & Celo", href: "/profile" },
-    { name: "Groups & Pages", tag: "Community Spaces", href: "/friends" },
-    { name: "Messages", tag: "Direct Chat", href: "/messages" },
-  ];
+  const openTree = (tree: "workspace" | "kasiCoin" | "groups") => {
+    setActiveTree(tree);
+    setExpanded(true);
+  };
+
+  const handleTipSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(tipAmount);
+    if (!tipRecipient.trim() || Number.isNaN(amt) || amt <= 0) return;
+    if (onSendTip) {
+      await onSendTip(tipRecipient.trim(), amt);
+    }
+    setTipRecipient("");
+    setTipOpen(false);
+  };
 
   return (
     <div
@@ -130,18 +165,18 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
         zIndex: 50,
         background: "var(--white)",
         borderTop: "1px solid var(--line)",
-        boxShadow: "0 -6px 24px rgba(26, 25, 22, 0.08)",
+        boxShadow: "0 -6px 20px rgba(26, 25, 22, 0.08)",
       }}
     >
       <div
         style={{
           maxWidth: 1120,
           margin: "0 auto",
-          padding: "8px 20px",
+          padding: "8px 14px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: 12,
+          gap: 8,
         }}
       >
         <button
@@ -154,26 +189,38 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 6,
             fontSize: 11,
             fontWeight: 700,
             color: "var(--ink)",
           }}
         >
           <span>{expanded ? "▾" : "▴"}</span>
-          <span>Mzansi Apps</span>
+          <span>Menu</span>
         </button>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/dashboard" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
-            Feed
-          </Link>
-          <Link href="/friends" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
-            Friends
-          </Link>
-          <Link href="/messages" className="mz-action" style={{ fontSize: 11, fontWeight: 600 }}>
-            Messages
-          </Link>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button
+            type="button"
+            className={`mz-follow ${expanded && activeTree === "workspace" ? "followed" : ""}`}
+            onClick={() => openTree("workspace")}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={`mz-follow ${expanded && activeTree === "kasiCoin" ? "followed" : ""}`}
+            onClick={() => openTree("kasiCoin")}
+          >
+            KASI Coin
+          </button>
+          <button
+            type="button"
+            className={`mz-follow ${expanded && activeTree === "groups" ? "followed" : ""}`}
+            onClick={() => openTree("groups")}
+          >
+            Groups & Pages
+          </button>
         </div>
       </div>
 
@@ -182,286 +229,25 @@ export const SwipeUpTaskbar: React.FC<{ onNotify?: (msg: string) => void }> = ({
           style={{
             maxWidth: 1120,
             margin: "0 auto",
-            padding: "6px 20px 16px",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-            gap: 10,
+            padding: "4px 14px 14px",
+            borderTop: "1px solid var(--line)",
           }}
         >
-          {products.map((prod) => (
-            <Link
-              key={prod.name}
-              href={prod.href}
-              onClick={() => onNotify?.(`Opened ${prod.name}`)}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid var(--line)",
-                background: "var(--bg)",
-                textDecoration: "none",
-                color: "var(--ink)",
-                display: "block",
-              }}
-            >
-              <strong style={{ fontSize: 12, display: "block" }}>{prod.name}</strong>
-              <span className="mz-tiny mz-muted">{prod.tag}</span>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-export const MzansiBrandMark: React.FC<{ compact?: boolean }> = ({ compact = false }) => (
-  <Link href="/" className="mz-brand" style={compact ? { fontSize: 22 } : undefined}>
-    <span aria-label="South Africa flag" role="img" style={{ fontSize: compact ? 20 : 24, lineHeight: 1 }}>
-      🇿🇦
-    </span>
-    <span className="mz-brand-mark" style={compact ? { fontSize: 28 } : undefined}>
-      ✳
-    </span>
-    <span>mzansi</span>
-  </Link>
-);
-
-export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
-  currentUser,
-  posts = [],
-  spaces = [],
-  suggestedMembers = [],
-  showFeed = true,
-  watermarkKey = "image1",
-  pageTitle = "A good day to connect.",
-  pageSubtitle = "Local community and KASI Coin on Celo.",
-  onCreatePost,
-  onToggleLike,
-  onToggleSave,
-  onAddComment,
-  onToggleFollow,
-  onClaimReward,
-  children,
-}) => {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const [openBranches, setOpenBranches] = useState<{
-    workspace: boolean;
-    kasiCoin: boolean;
-    corners: boolean;
-  }>({
-    workspace: true,
-    kasiCoin: true,
-    corners: true,
-  });
-
-  const [savedOnly, setSavedOnly] = useState<boolean>(false);
-  const [filter, setFilter] = useState<"all" | "following" | "latest">("all");
-  const [selectedSpace, setSelectedSpace] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [draftText, setDraftText] = useState<string>("");
-  const [draftImage, setDraftImage] = useState<string>("");
-  const [openReplyId, setOpenReplyId] = useState<string | number | null>(null);
-  const [replyText, setReplyText] = useState<string>("");
-  const [notice, setNotice] = useState<string>("");
-  const [walletAddress, setWalletAddress] = useState<string>("");
-
-  const [tipOpen, setTipOpen] = useState<boolean>(false);
-  const [tipRecipient, setTipRecipient] = useState<string>("");
-  const [tipAmount, setTipAmount] = useState<string>("10");
-  const [claimStatus, setClaimStatus] = useState<string>("Celo ready");
-
-  const showNotice = (msg: string) => {
-    setNotice(msg);
-    window.setTimeout(() => setNotice(""), 3500);
-  };
-
-  const toggleBranch = (key: "workspace" | "kasiCoin" | "corners") => {
-    setOpenBranches((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const handleConnectWalletInfo = async () => {
-    const eth = (
-      window as unknown as {
-        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-      }
-    ).ethereum;
-    if (!eth?.request) {
-      showNotice("Connect MiniPay or MetaMask on Celo.");
-      return;
-    }
-    try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
-      if (accounts?.[0]) {
-        setWalletAddress(accounts[0]);
-        showNotice(`Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
-      }
-    } catch {
-      showNotice("Wallet connection cancelled.");
-    }
-  };
-
-  const handleTriggerClaim = async () => {
-    setClaimStatus("Claiming…");
-    try {
-      if (onClaimReward) {
-        await onClaimReward();
-        setClaimStatus("Claimed");
-      } else {
-        await handleConnectWalletInfo();
-        setClaimStatus("Wallet ready");
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Claim failed.";
-      setClaimStatus("Claim error");
-      showNotice(message);
-    }
-  };
-
-  const handleSendKasiTip = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const target = tipRecipient.trim();
-    const amt = Number(tipAmount);
-    if (!target || Number.isNaN(amt) || amt <= 0) {
-      showNotice("Enter a recipient and valid amount.");
-      return;
-    }
-
-    const eth = (
-      window as unknown as {
-        ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-      }
-    ).ethereum;
-
-    if (!eth?.request) {
-      showNotice(`Tip queued: ${amt} KASI to ${target}.`);
-      setTipRecipient("");
-      setTipOpen(false);
-      return;
-    }
-
-    try {
-      const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[] | undefined;
-      const fromAddr = accounts?.[0];
-      if (fromAddr) setWalletAddress(fromAddr);
-
-      if (target.startsWith("0x") && target.length === 42 && fromAddr) {
-        const weiHex = `0x${BigInt(Math.round(amt * 1e18)).toString(16)}`;
-        const txHash = (await eth.request({
-          method: "eth_sendTransaction",
-          params: [{ from: fromAddr, to: target, value: weiHex }],
-        })) as string;
-        setClaimStatus(`Sent (${txHash.slice(0, 8)}…)`);
-        showNotice(`Sent ${amt} KASI to ${target.slice(0, 6)}…${target.slice(-4)}`);
-      } else {
-        setClaimStatus(`Tip set (${amt} KASI)`);
-        showNotice(`Tip of ${amt} KASI set for ${target}.`);
-      }
-
-      setTipRecipient("");
-      setTipOpen(false);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Tip cancelled.";
-      setClaimStatus("Tip cancelled");
-      showNotice(msg);
-    }
-  };
-
-  const visiblePosts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    let list = posts.filter((p) => {
-      if (savedOnly && !p.saved) return false;
-      if (selectedSpace && p.space !== selectedSpace) return false;
-      if (filter === "following" && !p.following) return false;
-      if (!q) return true;
-      return `${p.name} ${p.text} ${p.tag ?? ""} ${p.space}`.toLowerCase().includes(q);
-    });
-    if (filter === "latest") {
-      list = [...list].sort((a, b) => Number(b.id) - Number(a.id));
-    }
-    return list;
-  }, [posts, savedOnly, selectedSpace, filter, searchQuery]);
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
-      showNotice("Choose an image under 2 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setDraftImage(reader.result);
-        showNotice("Photo attached.");
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handlePostSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = draftText.trim();
-    if (!trimmed || !onCreatePost) return;
-    await onCreatePost({
-      text: trimmed,
-      space: selectedSpace || spaces[0]?.name || "Community",
-      image: draftImage || undefined,
-    });
-    setDraftText("");
-    setDraftImage("");
-    showNotice("Post published.");
-  };
-
-  const todayLabel = new Date()
-    .toLocaleDateString("en-ZA", { weekday: "long", month: "long", day: "numeric" })
-    .toUpperCase();
-
-  return (
-    <div className="mz-common-app" style={{ position: "relative", paddingBottom: 68, background: "transparent" }}>
-      <WatermarkBackdrop imageKey={watermarkKey} />
-
-      <aside className="mz-sidebar" aria-label="Main navigation" style={{ position: "relative", zIndex: 1 }}>
-        <MzansiBrandMark />
-        <p className="mz-tagline">KASI Coin · Celo</p>
-
-        <div style={{ display: "grid", gap: 14 }}>
-          <div>
-            <button
-              type="button"
-              className="mz-label"
-              style={{
-                background: "none",
-                border: 0,
-                padding: "4px 6px",
-                width: "100%",
-                textAlign: "left",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-              }}
-              onClick={() => toggleBranch("workspace")}
-              aria-expanded={openBranches.workspace}
-            >
-              <span>Workspace</span>
-              <span>{openBranches.workspace ? "▾" : "▸"}</span>
-            </button>
-
-            {openBranches.workspace && (
-              <nav className="mz-nav" style={{ paddingLeft: 10, marginTop: 4, borderLeft: "1px solid var(--line)" }}>
-                <button
-                  type="button"
-                  className={pathname === "/dashboard" && !savedOnly ? "active" : ""}
-                  onClick={() => {
-                    setSavedOnly(false);
-                    setSelectedSpace("");
-                    router.push("/dashboard");
-                  }}
-                >
-                  Feed
-                </button>
-                <button
-                  type="button"
+          {activeTree === "workspace" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                className={`mz-follow ${pathname === "/dashboard" ? "followed" : ""}`}
+                style={{ justifyContent: "flex-start", padding: "8px 10px", fontSize: 11 }}
+                onClick={() => {
+                  setExpanded(false);
+                  router.push("/dashboard");
+                }}
+              >
+                Feed
+              </button>
+              <button
+                type="button"
                   className={pathname === "/friends" ? "active" : ""}
                   onClick={() => router.push("/friends")}
                 >
@@ -681,7 +467,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
         </header>
 
         {notice && (
-          <div role="status" style={{ padding: "10px 36px", fontSize: 12, color: "var(--green)", fontWeight: 600 }}>
+          <div role="status" style={{ padding: "8px 20px", fontSize: 12, color: "var(--green)", fontWeight: 600 }}>
             {notice}
           </div>
         )}
@@ -694,7 +480,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                 <h1>{pageTitle}</h1>
                 <p className="mz-muted mz-tiny">{pageSubtitle}</p>
               </div>
-              <span style={{ fontSize: 28, color: "var(--orange)" }} aria-hidden="true">
+              <span style={{ fontSize: 24, color: "var(--orange)" }} aria-hidden="true">
                 ☼
               </span>
             </div>
@@ -728,7 +514,7 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
 
                 {onCreatePost && (
                   <form className="mz-composer" onSubmit={handlePostSubmit}>
-                    <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                       <div className={`mz-avatar ${currentUser.avatarColor ?? ""}`}>{currentUser.initials}</div>
                       <textarea
                         value={draftText}
@@ -936,7 +722,16 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
         </main>
       </div>
 
-      <SwipeUpTaskbar onNotify={showNotice} />
+      <SwipeUpTaskbar
+        spaces={spaces}
+        selectedSpace={selectedSpace}
+        onSelectSpace={(sp) => setSelectedSpace(sp)}
+        onConnectWallet={handleConnectWalletInfo}
+        onClaimReward={handleTriggerClaim}
+        onSendTip={handleSendTipAmount}
+        walletAddress={walletAddress}
+        claimStatus={claimStatus}
+      />
     </div>
   );
 };
