@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export const WATERMARK_IMAGES = {
-  image1: "/images/image1.jpg",
-  image2: "/images/image2.jpg",
-  image3: "/images/image3.jpg",
+  image1: "/images/1789669657455.jpg",
+  image2: "/images/1789794530888.jpg",
+  image3: "/images/1795326848083.jpg",
 } as const;
 
 export type WatermarkKey = keyof typeof WATERMARK_IMAGES;
@@ -637,15 +637,49 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                        <div>
-                          <strong style={{ fontSize: 13 }}>{post.author || "Mzansi Member"}</strong>
-                          {post.handle && (
-                            <span style={{ marginLeft: 6, fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>
-                              {post.handle}
-                            </span>
-                          )}
-                        </div>
-                        <span style={{ fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>{post.createdAt || ""}</span>
+<div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+  <span
+    aria-hidden="true"
+    style={{
+      width: 34,
+      height: 34,
+      borderRadius: "50%",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 12,
+      fontWeight: 800,
+      color: "#ffffff",
+      background:
+        post.color === "green"
+          ? "#007749"
+          : post.color === "pink"
+          ? "#de3831"
+          : post.color === "blue"
+          ? "#001489"
+          : "#ffb81c",
+      border: "1px solid #0b0f14",
+      flexShrink: 0,
+    }}
+  >
+    {post.initials ||
+      String(post.author || "MZ")
+        .trim()
+        .split(/\s+/)
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()}
+  </span>
+  <div>
+    <strong style={{ fontSize: 13 }}>{post.author || "Mzansi Member"}</strong>
+    {post.handle && (
+      <span style={{ marginLeft: 6, fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>
+        {post.handle}
+      </span>
+    )}
+  </div>
+</div>                        <span style={{ fontSize: 11, color: "rgba(11, 15, 20, 0.65)" }}>{post.createdAt || ""}</span>
                       </div>
 
                       {post.title && <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{post.title}</h2>}
@@ -661,9 +695,14 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
                         <button type="button" className="mz-follow" onClick={() => void handleSharePost(post)}>
                           ↗ Share
                         </button>
-                        <button type="button" className="mz-follow" onClick={() => setLongPressPost(post)}>
-                          ••• Tree Menu
-                        </button>
+<button
+  type="button"
+  className="mz-follow"
+  aria-label="Post options"
+  onClick={() => setLongPressPost(post)}
+>
+  •••
+</button>
                       </div>
 
                       <form
