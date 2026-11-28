@@ -60,7 +60,7 @@ export default function RegisterPage() {
         background: "transparent",
       }}
     >
-      <WatermarkBackdrop imageKey="image1" />
+      <WatermarkBackdrop imageKey="image3" />
       <div style={{ maxWidth: 960, width: "100%", margin: "0 auto", position: "relative", zIndex: 1 }}>
         <div className="mz-flag-strip" />
         <header className="mz-topbar" style={{ background: "rgba(255, 255, 255, 0.65)", backdropFilter: "blur(8px)" }}>
@@ -173,3 +173,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

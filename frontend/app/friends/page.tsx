@@ -218,7 +218,7 @@ export default function FriendsPage() {
   const outgoingUserIds = new Set(outgoingRequests.map((r) => r.userId));
 
   return (
-    <CommonUpgrade watermarkKey="image3"
+    <CommonUpgrade watermarkKey="image2"
       currentUser={user}
       showFeed={false}
       pageTitle="Friends & Registered Members"
@@ -361,6 +361,7 @@ export default function FriendsPage() {
     </CommonUpgrade>
   );
 }
+
 
 
 

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 export const WATERMARK_IMAGES = {
   image1: "/images/jacinta.jpg",
   image2: "/images/child.jpg",
-  image3: "/images/lawyer.jpg",
+  image3: "/images/adv-zuma.jpg",
 } as const;
 
 export type WatermarkKey = keyof typeof WATERMARK_IMAGES;

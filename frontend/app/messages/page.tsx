@@ -291,6 +291,7 @@ export default function MessagesPage() {
 
   return (
     <CommonUpgrade
+      watermarkKey="image3"
       currentUser={user}
       showFeed={false}
       pageTitle="Messages"
@@ -500,5 +501,6 @@ export default function MessagesPage() {
     </CommonUpgrade>
   );
 }
+
 
 
