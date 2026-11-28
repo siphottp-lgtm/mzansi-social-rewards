@@ -1,8 +1,8 @@
 ﻿"use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CommonUpgrade, MzansiUser } from "../../components/CommonUpgrade";
+import { CommonUpgrade, type MzansiUser } from "../../components/CommonUpgrade";
 import { fetchSharedMembers, makeInitials, SHARED_STORAGE_KEYS } from "../../lib/api";
 
 interface ChatMessage {
@@ -20,6 +20,7 @@ interface ChatThread {
   initials: string;
   role: string;
   color?: "" | "green" | "pink" | "blue";
+  avatarUrl?: string;
   unread: number;
   messages: ChatMessage[];
 }
@@ -28,10 +29,9 @@ const MESSAGES_STORAGE_KEY = SHARED_STORAGE_KEYS.messages;
 const PROFILE_STORAGE_KEY = SHARED_STORAGE_KEYS.profile;
 const MEMBER_STORAGE_KEYS = [
   SHARED_STORAGE_KEYS.members,
-  "mzansi_members_v1",
-  "mzansi_friends_v1",
-  "mzansi_users_v1",
-  "mzansi_community_members_v1",
+  "mzansi_registered_members",
+  "mzansi_members",
+  "mzansi_users",
 ];
 
 const DEFAULT_USER: MzansiUser = {
@@ -42,24 +42,60 @@ const DEFAULT_USER: MzansiUser = {
   avatarColor: "green",
 };
 
+function ThreadAvatar({
+  href,
+  name,
+  initials,
+  color,
+  avatarUrl,
+  stopPropagation = false,
+}: {
+  href: string;
+  name: string;
+  initials: string;
+  color?: "" | "green" | "pink" | "blue";
+  avatarUrl?: string;
+  stopPropagation?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
+      style={{ textDecoration: "none", flexShrink: 0 }}
+    >
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={name}
+          className={`mz-avatar small ${color ?? ""}`}
+          style={{ objectFit: "cover" }}
+        />
+      ) : (
+        <div className={`mz-avatar small ${color ?? ""}`}>{initials}</div>
+      )}
+    </Link>
+  );
+}
+
 function normalizeMemberThreads(rawList: unknown[]): ChatThread[] {
-  const colors: ("" | "green" | "pink" | "blue")[] = ["green", "pink", "blue", ""];
   const seen = new Set<string>();
   const threads: ChatThread[] = [];
 
-  rawList.forEach((entry, idx) => {
-    if (!entry || typeof entry !== "object") return;
+  for (let idx = 0; idx < rawList.length; idx += 1) {
+    const entry = rawList[idx];
+    if (!entry || typeof entry !== "object") continue;
     const item = entry as Record<string, unknown>;
+
     const rawName =
       (typeof item.memberName === "string" && item.memberName) ||
       (typeof item.fullName === "string" && item.fullName) ||
       (typeof item.name === "string" && item.name) ||
       "";
     const name = rawName.trim();
-    if (!name) return;
+    if (!name) continue;
 
     const id = String(item.id ?? item.handle ?? name.toLowerCase().replace(/\s+/g, "-"));
-    if (seen.has(id)) return;
+    if (seen.has(id)) continue;
     seen.add(id);
 
     const handle =
@@ -75,19 +111,20 @@ function normalizeMemberThreads(rawList: unknown[]): ChatThread[] {
     const color =
       item.color === "green" || item.color === "pink" || item.color === "blue" || item.color === ""
         ? item.color
-        : colors[idx % colors.length];
+        : (["green", "pink", "blue", ""] as const)[idx % 4];
+    const rawAvatar = item.avatarUrl || item.avatar;
 
-    const rawMsgs = Array.isArray(item.messages) ? item.messages : [];
-    const messages: ChatMessage[] = rawMsgs
-      .filter((m): m is Record<string, unknown> => Boolean(m && typeof m === "object"))
-      .map((m, mIdx) => ({
-        id: String(m.id ?? `${id}-msg-${mIdx}`),
-        sender: typeof m.sender === "string" && m.sender.trim() ? m.sender.trim() : name,
-        isMe: Boolean(m.isMe),
-        text: typeof m.text === "string" ? m.text : "",
-        time: typeof m.time === "string" ? m.time : "",
-      }))
-      .filter((m) => m.text.trim().length > 0);
+    const msgs: ChatMessage[] = Array.isArray(item.messages)
+      ? item.messages
+          .filter((m): m is Record<string, unknown> => Boolean(m && typeof m === "object"))
+          .map((m, mIdx) => ({
+            id: String(m.id ?? `${id}-msg-${mIdx}`),
+            sender: typeof m.sender === "string" && m.sender.trim() ? m.sender.trim() : name,
+            isMe: Boolean(m.isMe),
+            text: typeof m.text === "string" ? m.text : "",
+            time: typeof m.time === "string" && m.time.trim() ? m.time.trim() : "Recently",
+          }))
+      : [];
 
     threads.push({
       id,
@@ -96,33 +133,47 @@ function normalizeMemberThreads(rawList: unknown[]): ChatThread[] {
       initials,
       role,
       color,
+      avatarUrl: typeof rawAvatar === "string" && rawAvatar.trim() ? rawAvatar.trim() : undefined,
       unread: typeof item.unread === "number" ? item.unread : 0,
-      messages,
+      messages: msgs,
     });
-  });
+  }
 
   return threads;
 }
 
-function loadRegisteredMembersFromStorage(): ChatThread[] {
+function readStoredThreads(): ChatThread[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const rawSaved = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
+    if (rawSaved) {
+      const parsed = JSON.parse(rawSaved) as unknown;
+      if (Array.isArray(parsed)) {
+        const normalized = normalizeMemberThreads(parsed);
+        if (normalized.length > 0) return normalized;
+      }
+    }
+  } catch {
+    // Ignore storage read error
+  }
+
   for (const key of MEMBER_STORAGE_KEYS) {
     try {
       const raw = window.localStorage.getItem(key);
       if (!raw) continue;
-      const parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw) as unknown;
       const list = Array.isArray(parsed)
         ? parsed
         : parsed && typeof parsed === "object" && Array.isArray((parsed as { members?: unknown[] }).members)
         ? (parsed as { members: unknown[] }).members
-        : parsed && typeof parsed === "object" && Array.isArray((parsed as { friends?: unknown[] }).friends)
-        ? (parsed as { friends: unknown[] }).friends
         : [];
       const normalized = normalizeMemberThreads(list);
       if (normalized.length > 0) return normalized;
     } catch {
-      // Ignore malformed storage entries
+      // Ignore malformed storage entry
     }
   }
+
   return [];
 }
 
@@ -130,11 +181,12 @@ export default function MessagesPage() {
   const [user, setUser] = useState<MzansiUser>(DEFAULT_USER);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeId, setActiveId] = useState<string>("");
-  const [searchTerm, setSearchTerm] = useState<string>("");
-  const [draft, setDraft] = useState<string>("");
-  const [statusNote, setStatusNote] = useState<string>("");
+  const [search, setSearch] = useState("");
+  const [draft, setDraft] = useState("");
+  const [statusNote, setStatusNote] = useState("");
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
       const rawProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY);
       if (rawProfile) {
@@ -147,105 +199,74 @@ export default function MessagesPage() {
             handle: parsed.handle?.trim() || prev.handle,
             initials: makeInitials(name),
             avatarUrl: parsed.avatarUrl || "",
+            avatar: parsed.avatarUrl || "",
           }));
         }
       }
     } catch {
-      // Ignore profile storage read errors
+      // Ignore profile storage read error
     }
 
-    let savedThreads: ChatThread[] = [];
-    try {
-      const rawThreads = window.localStorage.getItem(MESSAGES_STORAGE_KEY);
-      if (rawThreads) {
-        const parsed = JSON.parse(rawThreads);
-        if (Array.isArray(parsed)) {
-          savedThreads = normalizeMemberThreads(parsed);
-        }
-      }
-    } catch {
-      // Ignore message storage read errors
+    const stored = readStoredThreads();
+    if (stored.length > 0) {
+      setThreads(stored);
+      setActiveId((prev) => prev || stored[0].id);
     }
 
-    const registered = loadRegisteredMembersFromStorage();
-    const mergedMap = new Map<string, ChatThread>();
-    for (const r of registered) {
-      mergedMap.set(r.id, r);
-    }
-    for (const s of savedThreads) {
-      const existing = mergedMap.get(s.id);
-      mergedMap.set(
-        s.id,
-        existing
-          ? {
-              ...existing,
-              unread: s.unread,
-              messages: s.messages.length > 0 ? s.messages : existing.messages,
-            }
-          : s
-      );
-    }
-
-    const merged = Array.from(mergedMap.values());
-    setThreads(merged);
-    if (merged.length > 0) {
-      setActiveId(merged[0].id);
-    }
-
-    const fetchBackendMembers = async () => {
-      try {
-        const remoteMembers = await fetchSharedMembers();
-        if (remoteMembers.length > 0) {
-          const remoteThreads: ChatThread[] = remoteMembers.map((m) => ({
-            id: String(m.id),
-            memberName: m.name,
-            handle: m.handle,
-            initials: m.initials || makeInitials(m.name),
-            role: m.role,
-            color: m.color,
-            unread: 0,
-            messages: [],
-          }));
-          setThreads((prev) => {
-            const byId = new Map<string, ChatThread>();
-            for (const rt of remoteThreads) byId.set(rt.id, rt);
-            for (const pt of prev) {
-              const found = byId.get(pt.id);
-              byId.set(
-                pt.id,
-                found
-                  ? {
-                      ...found,
-                      unread: pt.unread,
-                      messages: pt.messages.length > 0 ? pt.messages : found.messages,
-                    }
-                  : pt
-              );
-            }
-            const next = Array.from(byId.values());
-            setActiveId((cur) => cur || next[0]?.id || "");
-            return next;
+    let cancelled = false;
+    void fetchSharedMembers()
+      .then((shared) => {
+        if (cancelled || shared.length === 0) return;
+        setThreads((prev) => {
+          const existingById = new Map(prev.map((t) => [t.id, t]));
+          const merged: ChatThread[] = shared.map((m) => {
+            const existing = existingById.get(m.id);
+            return {
+              id: String(m.id),
+              memberName: m.name,
+              handle: m.handle,
+              initials: m.initials || makeInitials(m.name),
+              role: m.role,
+              color: m.color,
+              avatarUrl: m.avatarUrl || existing?.avatarUrl,
+              unread: existing?.unread ?? 0,
+              messages: existing?.messages ?? [],
+            };
           });
-        }
-      } catch {
-        // Keep local members when offline
-      }
-    };
+          for (const extra of prev) {
+            if (!merged.some((item) => item.id === extra.id)) {
+              merged.push(extra);
+            }
+          }
+          try {
+            window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(merged));
+          } catch {
+            // Ignore storage write error
+          }
+          return merged;
+        });
+        setActiveId((prev) => prev || String(shared[0].id));
+      })
+      .catch(() => {});
 
-    void fetchBackendMembers();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const saveThreads = (nextThreads: ChatThread[]) => {
-    setThreads(nextThreads);
-    try {
-      window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(nextThreads));
-    } catch {
-      // Ignore storage write errors
+  const persistThreads = useCallback((next: ChatThread[]) => {
+    setThreads(next);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore storage quota error
+      }
     }
-  };
+  }, []);
 
   const filteredThreads = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
     if (!q) return threads;
     return threads.filter(
       (t) =>
@@ -253,37 +274,39 @@ export default function MessagesPage() {
         t.handle.toLowerCase().includes(q) ||
         t.role.toLowerCase().includes(q)
     );
-  }, [threads, searchTerm]);
+  }, [threads, search]);
 
   const activeThread = useMemo(
-    () => filteredThreads.find((t) => t.id === activeId) ?? threads.find((t) => t.id === activeId) ?? filteredThreads[0],
-    [filteredThreads, threads, activeId]
+    () => threads.find((t) => t.id === activeId) ?? filteredThreads[0] ?? threads[0] ?? null,
+    [threads, filteredThreads, activeId]
   );
 
-  const selectThread = (threadId: string) => {
-    setActiveId(threadId);
-    const updated = threads.map((t) => (t.id === threadId ? { ...t, unread: 0 } : t));
-    saveThreads(updated);
+  const selectThread = (id: string) => {
+    setActiveId(id);
+    const updated = threads.map((t) => (t.id === id ? { ...t, unread: 0 } : t));
+    persistThreads(updated);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = draft.trim();
-    if (!trimmed || !activeThread) return;
+    const text = draft.trim();
+    if (!text || !activeThread) return;
 
-    const nowLabel = new Date().toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
-    const msg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      sender: (user.name ?? ""),
+    const nowLabel = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const outgoing: ChatMessage = {
+      id: `m-${Date.now()}`,
+      sender: user.name || "Member",
       isMe: true,
-      text: trimmed,
+      text,
       time: nowLabel,
     };
 
-    const next = threads.map((t) =>
-      t.id === activeThread.id ? { ...t, unread: 0, messages: [...t.messages, msg] } : t
+    const updated = threads.map((t) =>
+      t.id === activeThread.id
+        ? { ...t, unread: 0, messages: [...t.messages, outgoing] }
+        : t
     );
-    saveThreads(next);
+    persistThreads(updated);
     setDraft("");
     setStatusNote(`Sent to ${activeThread.memberName}.`);
     window.setTimeout(() => setStatusNote(""), 2500);
@@ -295,12 +318,12 @@ export default function MessagesPage() {
       currentUser={user}
       showFeed={false}
       pageTitle="Messages"
-      pageSubtitle="Direct chats with registered members and friends."
+      pageSubtitle="Direct conversations with registered Mzansi community members."
     >
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gridTemplateColumns: "minmax(220px, 290px) minmax(0, 1fr)",
           gap: 14,
           alignItems: "start",
         }}
@@ -315,33 +338,21 @@ export default function MessagesPage() {
             gap: 10,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-            <span className="mz-label">Inbox</span>
-            <Link href="/friends" className="mz-tiny" style={{ color: "var(--green)", fontWeight: 700 }}>
-              Friends & Members
-            </Link>
-          </div>
-
           <input
             type="search"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search members or friends..."
-            style={{
-              width: "100%",
-              border: "1px solid var(--line)",
-              borderRadius: 8,
-              padding: "7px 10px",
-              fontSize: 12,
-              background: "var(--bg)",
-            }}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search registered members..."
+            aria-label="Search registered members"
+            className="mz-transparent-input"
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, fontSize: 12 }}
           />
 
           {filteredThreads.length === 0 ? (
             <div className="mz-tiny mz-muted" style={{ padding: "12px 4px", lineHeight: 1.5 }}>
-              No registered members or friends found yet. Connect or register members in{" "}
-              <Link href="/friends" style={{ color: "var(--green)", fontWeight: 700 }}>
-                Friends & Members
+              No registered members available yet. Members appear here once registered or loaded on{" "}
+              <Link href="/friends/" style={{ color: "var(--green)", fontWeight: 600 }}>
+                Friends
               </Link>
               .
             </div>
@@ -368,7 +379,14 @@ export default function MessagesPage() {
                       cursor: "pointer",
                     }}
                   >
-                    <div className={`mz-avatar small ${t.color ?? ""}`}>{t.initials}</div>
+                    <ThreadAvatar
+                      href={`/profile/?memberId=${encodeURIComponent(t.id)}&name=${encodeURIComponent(t.memberName)}`}
+                      name={t.memberName}
+                      initials={t.initials}
+                      color={t.color}
+                      avatarUrl={t.avatarUrl}
+                      stopPropagation
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
                         <strong style={{ fontSize: 12 }}>{t.memberName}</strong>
@@ -425,7 +443,13 @@ export default function MessagesPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div className={`mz-avatar small ${activeThread.color ?? ""}`}>{activeThread.initials}</div>
+                  <ThreadAvatar
+                    href={`/profile/?memberId=${encodeURIComponent(activeThread.id)}&name=${encodeURIComponent(activeThread.memberName)}`}
+                    name={activeThread.memberName}
+                    initials={activeThread.initials}
+                    color={activeThread.color}
+                    avatarUrl={activeThread.avatarUrl}
+                  />
                   <div>
                     <strong style={{ fontSize: 13 }}>{activeThread.memberName}</strong>
                     <div className="mz-tiny mz-muted">
@@ -433,13 +457,10 @@ export default function MessagesPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {statusNote && (
                 <div role="status" className="mz-tiny" style={{ color: "var(--green)", fontWeight: 600 }}>
                   {statusNote}
                 </div>
-              )}
+              </div>
 
               <div style={{ display: "grid", gap: 8, minHeight: 160, maxHeight: 360, overflowY: "auto", paddingRight: 4 }}>
                 {activeThread.messages.length === 0 ? (
@@ -452,38 +473,43 @@ export default function MessagesPage() {
                       key={m.id}
                       style={{
                         justifySelf: m.isMe ? "end" : "start",
-                        maxWidth: "82%",
-                        background: m.isMe ? "var(--bg)" : "var(--white)",
-                        border: "1px solid var(--line)",
+                        maxWidth: "80%",
+                        background: m.isMe ? "var(--green)" : "var(--bg)",
+                        color: m.isMe ? "#fff" : "var(--ink)",
+                        border: m.isMe ? "none" : "1px solid var(--line)",
                         borderRadius: 10,
                         padding: "8px 12px",
                       }}
                     >
-                      <div style={{ fontSize: 12 }}>{m.text}</div>
-                      <div className="mz-tiny mz-muted" style={{ marginTop: 4 }}>
-                        {m.sender}
-                        {m.time ? ` · ${m.time}` : ""}
+                      <div style={{ fontSize: 13 }}>{m.text}</div>
+                      <div
+                        className="mz-tiny"
+                        style={{
+                          marginTop: 4,
+                          opacity: m.isMe ? 0.85 : 0.65,
+                          textAlign: "right",
+                        }}
+                      >
+                        {m.time}
                       </div>
                     </div>
                   ))
                 )}
               </div>
 
-              <form
-                onSubmit={handleSendMessage}
-                style={{ display: "flex", gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}
-              >
+              <form onSubmit={handleSend} style={{ display: "flex", gap: 8 }}>
                 <input
+                  type="text"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder={`Message ${activeThread.memberName}...`}
                   required
                   style={{
                     flex: 1,
-                    border: "1px solid var(--line)",
+                    padding: "9px 12px",
                     borderRadius: 8,
-                    padding: "8px 10px",
-                    fontSize: 12,
+                    border: "1px solid var(--line)",
+                    fontSize: 13,
                   }}
                 />
                 <button type="submit" className="mz-primary">
@@ -492,8 +518,8 @@ export default function MessagesPage() {
               </form>
             </>
           ) : (
-            <div className="mz-tiny mz-muted" style={{ padding: "24px 8px", textAlign: "center" }}>
-              Select or add a registered member or friend to begin chatting.
+            <div className="mz-tiny mz-muted" style={{ padding: "24px 8px" }}>
+              Select a registered member on the left to start messaging.
             </div>
           )}
         </section>
@@ -501,6 +527,3 @@ export default function MessagesPage() {
     </CommonUpgrade>
   );
 }
-
-
-

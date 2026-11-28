@@ -59,6 +59,8 @@ export interface MzansiPost {
   replies?: MzansiPostComment[];
   image?: string;
   imageUrl?: string;
+  avatar?: string;
+  avatarUrl?: string;
   [key: string]: unknown;
 }
 
@@ -535,26 +537,75 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
               </Link>
             ))}
           </nav>
-
-          <div className="mz-top-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {currentUser ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#007749" }}>
-                {currentUser.fullName || currentUser.name || currentUser.handle || "Member"}
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="mz-follow"
-                style={{ fontSize: 12 }}
-                onClick={() => router.push("/login")}
-              >
-                Log in
-              </button>
-            )}
-          </div>
-        </header>
-
-        <main style={{ padding: "24px 16px 48px", display: "grid", gap: 16 }}>
+<div className="mz-top-actions" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+  {currentUser ? (
+    <Link
+      href="/profile/"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        textDecoration: "none",
+        color: "#007749",
+        fontSize: 12,
+        fontWeight: 700,
+      }}
+    >
+      {currentUser.avatar || currentUser.avatarUrl ? (
+        <img
+          src={String(currentUser.avatar || currentUser.avatarUrl)}
+          alt={currentUser.fullName || currentUser.name || "Member"}
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: "50%",
+            objectFit: "cover",
+            border: "1px solid #007749",
+            flexShrink: 0,
+          }}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: "50%",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: 800,
+            color: "#ffffff",
+            background: "#007749",
+            border: "1px solid #0b0f14",
+            flexShrink: 0,
+          }}
+        >
+          {currentUser.initials ||
+            String(currentUser.fullName || currentUser.name || currentUser.handle || "MZ")
+              .replace(/^@/, "")
+              .trim()
+              .split(/\s+/)
+              .map((w) => w[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+        </span>
+      )}
+      <span>{currentUser.fullName || currentUser.name || currentUser.handle || "Member"}</span>
+    </Link>
+  ) : (
+    <button
+      type="button"
+      className="mz-follow"
+      style={{ fontSize: 12 }}
+      onClick={() => router.push("/login/")}
+    >
+      Log in
+    </button>
+  )}
+</div>        <main style={{ padding: "24px 16px 48px", display: "grid", gap: 16 }}>
           {toastMsg && (
             <div
               role="status"
@@ -586,25 +637,30 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
               <form
                 onSubmit={handlePostSubmit}
                 className="mz-composer"
-                style={{ padding: 14, borderRadius: 14, display: "grid", gap: 10 }}
+                style={{ display: "grid", gap: 10, padding: 14, borderRadius: 14 }}
               >
                 <textarea
                   value={draftText}
                   onChange={(e) => setDraftText(e.target.value)}
-                  placeholder={editingPostId ? "Edit your post..." : "Share something with Mzansi..."}
+                  placeholder={editingPostId ? "Update your post..." : "Share an update with Mzansi..."}
                   rows={3}
                   className="mz-transparent-input"
-                  style={{ width: "100%", borderRadius: 10, padding: 10, fontSize: 13, resize: "vertical" }}
+                  style={{ width: "100%", resize: "vertical", borderRadius: 10, padding: "8px 10px", fontSize: 13 }}
                 />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(11, 15, 20, 0.72)" }}>
-                    Touch and hold any post on mobile for tree options
-                  </span>
-                  <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     {editingPostId && (
                       <button
                         type="button"
                         className="mz-follow"
+                        onClick={() => {
+                          setEditingPostId(null);
+                          setDraftText("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
                         onClick={() => {
                           setEditingPostId(null);
                           setDraftText("");
@@ -623,6 +679,10 @@ export const CommonUpgrade: React.FC<CommonUpgradeProps> = ({
               <div style={{ display: "grid", gap: 12 }}>
                 {visiblePosts.map((post) => {
                   const postBody = post.text || post.body || post.content || "";
+                    const authorLabel = post.author || "Mzansi Member";
+                    const authorProfileHref = post.authorId
+                      ? `/profile/?memberId=${encodeURIComponent(String(post.authorId))}&name=${encodeURIComponent(authorLabel)}`
+                      : `/profile/?name=${encodeURIComponent(authorLabel)}`;
                   return (
                     <article
                       key={post.id}
